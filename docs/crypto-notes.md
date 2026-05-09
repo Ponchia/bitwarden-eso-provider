@@ -23,9 +23,23 @@ Legacy AES-CBC encrypted strings without a MAC, including type `0` and untyped
 direction and avoids accepting tamperable ciphertext in a Kubernetes secret
 sync path.
 
+## Master Password Unlock
+
+The Vaultwarden crate derives master keys from the normalized account email
+(`trim` + lowercase) and the server prelogin KDF config:
+
+- PBKDF2-HMAC-SHA256 (`KdfType = 0`)
+- Argon2id (`KdfType = 1`, memory converted from MiB to KiB)
+
+It rejects prelogin KDF parameters below Bitwarden's current downgrade
+minimums, and also caps them at Bitwarden's current setting maximums so a
+controller process cannot be asked to perform unbounded key derivation. The
+derived 32-byte master key is stretched with HKDF-SHA256 using `enc` and `mac`
+info labels to decrypt the master-key-wrapped 64-byte user key.
+
 ## Current Scope
 
-This code covers field-level cipher decryption once the correct user,
-organization, or item key is already available. Key derivation, user API-key
-login, organization key unwrap, and per-cipher key handling are separate
+This code covers master-password user-key unlock and field-level cipher
+decryption once the correct user, organization, or item key is available. User
+API-key login, organization key unwrap, and per-cipher key handling are separate
 milestones and must receive their own fixture tests.

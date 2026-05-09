@@ -108,12 +108,11 @@ fn provider_error(error: &VaultwardenClientError) -> (StatusCode, Json<ErrorResp
             StatusCode::NOT_FOUND
         }
         VaultwardenClientError::Crypto(_)
-        | VaultwardenClientError::Cipher(CipherError::Crypto(_)) => {
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
-        VaultwardenClientError::NotImplemented { .. } => StatusCode::NOT_IMPLEMENTED,
-        VaultwardenClientError::InvalidEndpoint { .. }
+        | VaultwardenClientError::Cipher(CipherError::Crypto(_))
+        | VaultwardenClientError::KeyDerivation(_)
+        | VaultwardenClientError::InvalidEndpoint { .. }
         | VaultwardenClientError::InsecureEndpoint => StatusCode::INTERNAL_SERVER_ERROR,
+        VaultwardenClientError::NotImplemented { .. } => StatusCode::NOT_IMPLEMENTED,
     };
 
     (status, Json(ErrorResponse { error: message }))

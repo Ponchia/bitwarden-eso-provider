@@ -8,6 +8,7 @@
 
 pub mod cipher;
 pub mod crypto;
+pub mod keys;
 
 use async_trait::async_trait;
 use secrecy::SecretString;
@@ -20,6 +21,11 @@ pub use cipher::{
     EncryptedField, EncryptedLogin, EncryptedSshKey,
 };
 pub use crypto::{AuthenticatedSymmetricKey, CryptoError, EncryptedString, EncryptionType};
+pub use keys::{
+    derive_master_key, master_password_authentication_hash, normalize_master_password_salt,
+    stretch_master_key, unwrap_user_key_with_master_key, KdfConfig, KeyDerivationError, MasterKey,
+    MasterPasswordUnlockData,
+};
 
 /// Vaultwarden endpoint configuration.
 #[derive(Debug, Clone)]
@@ -131,6 +137,9 @@ pub enum VaultwardenClientError {
     /// Cipher model or field extraction failure.
     #[error(transparent)]
     Cipher(#[from] CipherError),
+    /// Master-password key derivation or unlock failure.
+    #[error(transparent)]
+    KeyDerivation(#[from] KeyDerivationError),
     /// URL parsing failed.
     #[error("invalid Vaultwarden endpoint")]
     InvalidEndpoint {

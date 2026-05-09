@@ -165,8 +165,10 @@ impl AuthenticatedSymmetricKey {
     /// Returns an error when the input is not valid base64 or does not decode
     /// to the expected 64-byte key format.
     pub fn from_base64(raw: &str) -> Result<Self, CryptoError> {
-        let decoded = decode_base64("key", raw)?;
-        Self::try_from(decoded.as_slice())
+        let mut decoded = decode_base64("key", raw)?;
+        let key = Self::try_from(decoded.as_slice());
+        decoded.zeroize();
+        key
     }
 
     /// Return the AES-256-CBC key half.
