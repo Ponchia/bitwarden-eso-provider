@@ -7,7 +7,6 @@ Default chart goals:
 - Namespace-scoped deployment by default.
 - No dashboard by default.
 - No cluster-admin permissions.
-- NetworkPolicy examples for Vaultwarden-only egress.
+- NetworkPolicy examples for Vaultwarden and Bitwarden endpoint egress.
 - Explicit TLS and CA configuration.
 - Optional ServiceMonitor.
-

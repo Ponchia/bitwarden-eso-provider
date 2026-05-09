@@ -1,4 +1,4 @@
-//! Vaultwarden HTTP API client and sync resolver.
+//! Bitwarden-compatible HTTP API client and sync resolver.
 
 use std::{
     sync::Arc,
@@ -16,17 +16,17 @@ use vwso_core::SecretDocument;
 use crate::{
     AuthenticatedSymmetricKey, DecryptedCipher, EncryptedCipher, KdfConfig,
     MasterPasswordUnlockData, VaultwardenAuth, VaultwardenClientError, VaultwardenEndpoint,
-    VaultwardenProvider, VaultwardenSelector,
+    VaultwardenEndpoints, VaultwardenProvider, VaultwardenSelector,
 };
 
 const BITWARDEN_CLIENT_VERSION: &str = "2025.12.0";
 const DEFAULT_DEVICE_TYPE_SERVER: u8 = 22;
 const DEFAULT_CACHE_TTL: Duration = Duration::from_secs(60);
 
-/// Vaultwarden HTTP API client.
+/// Bitwarden-compatible HTTP API client.
 #[derive(Clone)]
 pub struct VaultwardenApiClient {
-    endpoint: VaultwardenEndpoint,
+    endpoints: VaultwardenEndpoints,
     auth: VaultwardenAuth,
     http: HttpClient,
     device: VaultwardenDevice,
@@ -35,8 +35,8 @@ pub struct VaultwardenApiClient {
 }
 
 impl VaultwardenApiClient {
-    /// Build a Vaultwarden API client with the default HTTP client and device
-    /// identity.
+    /// Build an API client for a single-origin Vaultwarden or self-hosted
+    /// Bitwarden server with the default HTTP client and device identity.
     ///
     /// # Errors
     ///
@@ -48,7 +48,8 @@ impl VaultwardenApiClient {
         Self::with_device(endpoint, auth, VaultwardenDevice::default())
     }
 
-    /// Build a Vaultwarden API client with an explicit device identity.
+    /// Build an API client for a single-origin Vaultwarden or self-hosted
+    /// Bitwarden server with an explicit device identity.
     ///
     /// # Errors
     ///
@@ -61,8 +62,8 @@ impl VaultwardenApiClient {
         Self::with_device_and_cache(endpoint, auth, device, VaultwardenCacheConfig::default())
     }
 
-    /// Build a Vaultwarden API client with explicit device identity and cache
-    /// settings.
+    /// Build an API client for a single-origin Vaultwarden or self-hosted
+    /// Bitwarden server with explicit device identity and cache settings.
     ///
     /// # Errors
     ///
@@ -73,12 +74,66 @@ impl VaultwardenApiClient {
         device: VaultwardenDevice,
         cache_config: VaultwardenCacheConfig,
     ) -> Result<Self, VaultwardenApiError> {
+        Self::with_endpoints_device_and_cache(
+            VaultwardenEndpoints::from_single_origin(endpoint),
+            auth,
+            device,
+            cache_config,
+        )
+    }
+
+    /// Build an API client from explicit identity and API endpoint bases.
+    ///
+    /// This mode is required for Bitwarden Cloud, where identity and API
+    /// endpoints live on separate hosts.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP client cannot be constructed.
+    pub fn with_endpoints(
+        endpoints: VaultwardenEndpoints,
+        auth: VaultwardenAuth,
+    ) -> Result<Self, VaultwardenApiError> {
+        Self::with_endpoints_and_device(endpoints, auth, VaultwardenDevice::default())
+    }
+
+    /// Build an API client from explicit identity and API endpoint bases with
+    /// an explicit device identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP client cannot be constructed.
+    pub fn with_endpoints_and_device(
+        endpoints: VaultwardenEndpoints,
+        auth: VaultwardenAuth,
+        device: VaultwardenDevice,
+    ) -> Result<Self, VaultwardenApiError> {
+        Self::with_endpoints_device_and_cache(
+            endpoints,
+            auth,
+            device,
+            VaultwardenCacheConfig::default(),
+        )
+    }
+
+    /// Build an API client from explicit identity and API endpoint bases with
+    /// explicit device identity and cache settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP client cannot be constructed.
+    pub fn with_endpoints_device_and_cache(
+        endpoints: VaultwardenEndpoints,
+        auth: VaultwardenAuth,
+        device: VaultwardenDevice,
+        cache_config: VaultwardenCacheConfig,
+    ) -> Result<Self, VaultwardenApiError> {
         let http = HttpClient::builder()
             .user_agent("vaultwarden-secrets-operator")
             .build()?;
 
         Ok(Self {
-            endpoint,
+            endpoints,
             auth,
             http,
             device,
@@ -94,7 +149,10 @@ impl VaultwardenApiClient {
     /// Returns an error for transport failures, non-success status codes,
     /// malformed responses, or KDF downgrade/resource validation failures.
     pub async fn prelogin(&self, email: &str) -> Result<KdfConfig, VaultwardenClientError> {
-        let url = self.endpoint_url(&["identity", "accounts", "prelogin", "password"])?;
+        let url = Self::endpoint_url(
+            self.endpoints.identity_url(),
+            &["accounts", "prelogin", "password"],
+        )?;
         let response = self
             .http
             .post(url)
@@ -115,7 +173,7 @@ impl VaultwardenApiClient {
     /// Returns an error when authentication, response parsing, or local unlock
     /// fails.
     pub async fn login_with_api_key(&self) -> Result<VaultwardenSession, VaultwardenClientError> {
-        let url = self.endpoint_url(&["identity", "connect", "token"])?;
+        let url = Self::endpoint_url(self.endpoints.identity_url(), &["connect", "token"])?;
         let scope = if self.auth.client_id.starts_with("organization.") {
             "api.organization"
         } else {
@@ -154,7 +212,7 @@ impl VaultwardenApiClient {
         &self,
         session: &VaultwardenSession,
     ) -> Result<SyncResponse, VaultwardenClientError> {
-        let mut url = self.endpoint_url(&["api", "sync"])?;
+        let mut url = Self::endpoint_url(self.endpoints.api_url(), &["sync"])?;
         url.query_pairs_mut().append_pair("excludeDomains", "true");
 
         let response = self
@@ -249,8 +307,8 @@ impl VaultwardenApiClient {
         .into())
     }
 
-    fn endpoint_url(&self, segments: &[&str]) -> Result<Url, VaultwardenApiError> {
-        let mut url = self.endpoint.base_url().clone();
+    fn endpoint_url(base_url: &Url, segments: &[&str]) -> Result<Url, VaultwardenApiError> {
+        let mut url = base_url.clone();
         url.set_query(None);
         url.set_fragment(None);
 
@@ -322,7 +380,7 @@ impl CachedVault {
     }
 }
 
-/// Stable device identity sent to Vaultwarden during API-key login.
+/// Stable device identity sent during API-key login.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct VaultwardenDevice {
     /// Bitwarden device type numeric value.
@@ -343,7 +401,7 @@ impl Default for VaultwardenDevice {
     }
 }
 
-/// Authenticated Vaultwarden session with an unlocked user key.
+/// Authenticated Bitwarden-compatible session with an unlocked user key.
 pub struct VaultwardenSession {
     access_token: SecretString,
     /// Server token expiry in seconds.
@@ -396,12 +454,18 @@ impl TryFrom<PreloginResponse> for KdfConfig {
 
 #[derive(Debug, Serialize)]
 struct ApiKeyTokenRequest<'a> {
+    #[serde(rename = "grant_type")]
     grant_type: &'static str,
     scope: &'static str,
+    #[serde(rename = "client_id")]
     client_id: &'a str,
+    #[serde(rename = "client_secret")]
     client_secret: &'a str,
+    #[serde(rename = "deviceIdentifier")]
     device_identifier: &'a str,
+    #[serde(rename = "deviceName")]
     device_name: &'a str,
+    #[serde(rename = "deviceType")]
     device_type: u8,
 }
 
@@ -534,14 +598,14 @@ impl BitwardenRequestHeaders for reqwest::RequestBuilder {
     }
 }
 
-/// Vaultwarden API errors.
+/// Bitwarden-compatible API errors.
 #[derive(Debug, Error)]
 pub enum VaultwardenApiError {
     /// HTTP client error.
     #[error(transparent)]
     Http(#[from] reqwest::Error),
     /// Base URL cannot be used for endpoint construction.
-    #[error("Vaultwarden base URL cannot be used to build API endpoints")]
+    #[error("Bitwarden-compatible base URL cannot be used to build API endpoints")]
     InvalidBaseUrl,
     /// Server returned a non-success status.
     #[error("Vaultwarden {endpoint} request returned HTTP {status}")]
@@ -552,25 +616,25 @@ pub enum VaultwardenApiError {
         status: u16,
     },
     /// KDF type is unknown.
-    #[error("unsupported Vaultwarden KDF type {kdf_type}")]
+    #[error("unsupported Bitwarden-compatible KDF type {kdf_type}")]
     UnsupportedKdfType {
         /// Numeric KDF type returned by the server.
         kdf_type: u8,
     },
     /// KDF response is missing a required parameter.
-    #[error("Vaultwarden KDF response is missing {parameter}")]
+    #[error("Bitwarden-compatible KDF response is missing {parameter}")]
     MissingKdfParameter {
         /// Missing parameter name.
         parameter: &'static str,
     },
     /// API-key login did not return master-password unlock data.
-    #[error("Vaultwarden token response did not include master-password unlock data")]
+    #[error("Bitwarden-compatible token response did not include master-password unlock data")]
     MissingMasterPasswordUnlock,
     /// Cache refresh did not produce a sync response.
-    #[error("Vaultwarden sync cache is empty after refresh")]
+    #[error("Bitwarden-compatible sync cache is empty after refresh")]
     MissingCachedSync,
     /// Requested cipher was not present in the sync response.
-    #[error("Vaultwarden cipher {key} was not found")]
+    #[error("Bitwarden-compatible cipher {key} was not found")]
     CipherNotFound {
         /// Requested selector key.
         key: String,
@@ -661,9 +725,62 @@ mod tests {
         scope: String,
         client_id: String,
         client_secret: String,
+        #[serde(rename = "deviceIdentifier")]
         device_identifier: String,
+        #[serde(rename = "deviceName")]
         device_name: String,
+        #[serde(rename = "deviceType")]
         device_type: u8,
+    }
+
+    #[test]
+    fn builds_single_origin_vaultwarden_endpoint_paths() -> TestResult {
+        let endpoint = VaultwardenEndpoint::parse("https://vault.example.test/base/")?;
+        let endpoints = VaultwardenEndpoints::from_single_origin(endpoint);
+        let prelogin = VaultwardenApiClient::endpoint_url(
+            endpoints.identity_url(),
+            &["accounts", "prelogin", "password"],
+        )?;
+        let token =
+            VaultwardenApiClient::endpoint_url(endpoints.identity_url(), &["connect", "token"])?;
+        let sync = VaultwardenApiClient::endpoint_url(endpoints.api_url(), &["sync"])?;
+
+        assert_eq!(
+            prelogin.as_str(),
+            "https://vault.example.test/base/identity/accounts/prelogin/password"
+        );
+        assert_eq!(
+            token.as_str(),
+            "https://vault.example.test/base/identity/connect/token"
+        );
+        assert_eq!(sync.as_str(), "https://vault.example.test/base/api/sync");
+        Ok(())
+    }
+
+    #[test]
+    fn builds_split_bitwarden_cloud_endpoint_paths() -> TestResult {
+        let endpoints = VaultwardenEndpoints::parse_split(
+            "https://identity.bitwarden.com/",
+            "https://api.bitwarden.com/",
+        )?;
+        let prelogin = VaultwardenApiClient::endpoint_url(
+            endpoints.identity_url(),
+            &["accounts", "prelogin", "password"],
+        )?;
+        let token =
+            VaultwardenApiClient::endpoint_url(endpoints.identity_url(), &["connect", "token"])?;
+        let sync = VaultwardenApiClient::endpoint_url(endpoints.api_url(), &["sync"])?;
+
+        assert_eq!(
+            prelogin.as_str(),
+            "https://identity.bitwarden.com/accounts/prelogin/password"
+        );
+        assert_eq!(
+            token.as_str(),
+            "https://identity.bitwarden.com/connect/token"
+        );
+        assert_eq!(sync.as_str(), "https://api.bitwarden.com/sync");
+        Ok(())
     }
 
     #[tokio::test]
@@ -674,6 +791,27 @@ mod tests {
             client.prelogin("User@Example.COM").await?,
             KdfConfig::Pbkdf2Sha256 { iterations: 5_000 }
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn resolves_cipher_property_with_split_bitwarden_endpoints() -> TestResult {
+        let (client, counters) =
+            fake_split_client_with_cache(VaultwardenCacheConfig::default()).await?;
+        let selector = VaultwardenSelector::try_from(RemoteRef {
+            key: "app/database".to_string(),
+            property: Some("DATABASE_URL".to_string()),
+            version: None,
+        })?;
+
+        let document = client.resolve(selector).await?;
+
+        assert_eq!(
+            document.data.get("DATABASE_URL"),
+            Some(&"postgres://app:secret@db:5432/app".to_string())
+        );
+        assert_eq!(counters.token_requests(), 1);
+        assert_eq!(counters.sync_requests(), 1);
         Ok(())
     }
 
@@ -826,6 +964,27 @@ mod tests {
         Ok((client, counters))
     }
 
+    async fn fake_split_client_with_cache(
+        cache_config: VaultwardenCacheConfig,
+    ) -> Result<(VaultwardenApiClient, FakeCounters), Box<dyn std::error::Error>> {
+        let (identity_url, api_url, counters) = spawn_fake_split_servers().await?;
+        let endpoints = VaultwardenEndpoints::parse_split(&identity_url, &api_url)?;
+        let auth = VaultwardenAuth {
+            client_id: "user.fixture".to_string(),
+            client_secret: "api-secret".into(),
+            master_password: PASSWORD.into(),
+        };
+
+        let client = VaultwardenApiClient::with_endpoints_device_and_cache(
+            endpoints,
+            auth,
+            VaultwardenDevice::default(),
+            cache_config,
+        )?;
+
+        Ok((client, counters))
+    }
+
     async fn spawn_fake_server() -> Result<(String, FakeCounters), Box<dyn std::error::Error>> {
         let cipher = serde_json::from_str::<serde_json::Value>(LOGIN_CIPHER_JSON)?;
         let counters = FakeCounters::default();
@@ -847,6 +1006,45 @@ mod tests {
         });
 
         Ok((format!("http://{}", socket_addr(address)), counters))
+    }
+
+    async fn spawn_fake_split_servers(
+    ) -> Result<(String, String, FakeCounters), Box<dyn std::error::Error>> {
+        let cipher = serde_json::from_str::<serde_json::Value>(LOGIN_CIPHER_JSON)?;
+        let counters = FakeCounters::default();
+        let state = FakeState {
+            cipher,
+            counters: counters.clone(),
+        };
+        let identity_app = Router::new()
+            .route("/accounts/prelogin/password", post(fake_prelogin))
+            .route("/connect/token", post(fake_token))
+            .with_state(state.clone());
+        let api_app = Router::new()
+            .route("/sync", get(fake_sync))
+            .with_state(state);
+
+        let identity_listener = TcpListener::bind("127.0.0.1:0").await?;
+        let identity_address = identity_listener.local_addr()?;
+        tokio::spawn(async move {
+            if let Err(error) = axum::serve(identity_listener, identity_app).await {
+                eprintln!("fake Bitwarden identity server failed: {error}");
+            }
+        });
+
+        let api_listener = TcpListener::bind("127.0.0.1:0").await?;
+        let api_address = api_listener.local_addr()?;
+        tokio::spawn(async move {
+            if let Err(error) = axum::serve(api_listener, api_app).await {
+                eprintln!("fake Bitwarden API server failed: {error}");
+            }
+        });
+
+        Ok((
+            format!("http://{}", socket_addr(identity_address)),
+            format!("http://{}", socket_addr(api_address)),
+            counters,
+        ))
     }
 
     async fn fake_prelogin(Json(request): Json<FakePreloginRequest>) -> impl IntoResponse {

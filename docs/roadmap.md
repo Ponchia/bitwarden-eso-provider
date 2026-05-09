@@ -20,9 +20,10 @@ Initial notes on authenticated encrypted string handling live in
 - Add field extraction for login, secure note, SSH key, and custom fields.
 - Wire runtime configuration into `vwso-eso-webhook`.
 - Add cache with explicit TTL and single-flight refresh.
+- Add split Bitwarden Cloud endpoint support with fake-server coverage.
 - Add redacted metrics.
 - Add a local CLI smoke-test command.
-- Add opt-in live Vaultwarden smoke test.
+- Add opt-in live Bitwarden-compatible smoke test.
 
 ## Phase 2: ESO Webhook
 

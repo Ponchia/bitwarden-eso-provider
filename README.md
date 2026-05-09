@@ -1,20 +1,19 @@
 # Vaultwarden Secrets Operator
 
 Vaultwarden Secrets Operator is an experimental Rust implementation for using a
-Vaultwarden-backed Bitwarden Password Manager vault as a Kubernetes secret
-source.
+Vaultwarden or Bitwarden Password Manager vault as a Kubernetes secret source.
 
 The initial target is not a bespoke Kubernetes controller. The first production
 path is an External Secrets Operator webhook provider:
 
 ```text
-Vaultwarden -> vwso-eso-webhook -> External Secrets Operator -> Kubernetes Secret
+Vaultwarden/Bitwarden -> vwso-eso-webhook -> External Secrets Operator -> Kubernetes Secret
 ```
 
 This keeps Kubernetes ownership, refresh policy, deletion behavior, templating,
 status conditions, and GitOps integration in External Secrets Operator while this
 project focuses on one narrow responsibility: safely authenticating to
-Vaultwarden-compatible APIs and resolving encrypted vault items.
+Bitwarden-compatible Password Manager APIs and resolving encrypted vault items.
 
 ## Status
 
@@ -22,20 +21,21 @@ Early implementation. Do not deploy yet.
 
 The current repository contains:
 
-- A Rust workspace with core model, Vaultwarden client boundary, and ESO webhook
-  entrypoint crates.
+- A Rust workspace with core model, Bitwarden-compatible client boundary, and
+  ESO webhook entrypoint crates.
 - Bitwarden-compatible authenticated encrypted string decryption.
 - Master-password user-key unlock for PBKDF2-SHA256 and Argon2id accounts.
-- A tested Vaultwarden API-key login and sync client path backed by a local fake
-  server, wired into the ESO webhook runtime through environment configuration.
+- A tested API-key login and sync client path backed by local fake servers for
+  both Vaultwarden-style single-origin and Bitwarden-style split endpoints,
+  wired into the ESO webhook runtime through environment configuration.
 - In-memory sync caching with explicit TTL and single-flight refresh behavior.
 - Architecture, threat-model, and reference notes.
 - Example External Secrets Operator manifests.
 - CI scaffolding for formatting, clippy, unit tests, fake-server tests, and an
-  opt-in live Vaultwarden smoke test.
+  opt-in live Bitwarden-compatible smoke test.
 
 The webhook binary still needs deployment manifests, redacted metrics, and live
-Vaultwarden/kind integration tests before it should be deployed.
+Vaultwarden/Bitwarden/kind integration tests before it should be deployed.
 
 ## Design Principles
 
@@ -54,7 +54,7 @@ Vaultwarden/kind integration tests before it should be deployed.
 
 ```text
 crates/vwso-core          Shared request/response and secret document types
-crates/vwso-vaultwarden   Vaultwarden-compatible API and crypto boundary
+crates/vwso-vaultwarden   Bitwarden-compatible API and crypto boundary
 crates/vwso-eso-webhook   HTTP adapter for External Secrets Operator webhook
 deploy/eso                Example SecretStore and ExternalSecret manifests
 docs                      Architecture, decisions, threat model, research
@@ -80,8 +80,20 @@ VWSO_CACHE_TTL_SECONDS=60 \
 cargo run -p vwso-eso-webhook -- --listen 127.0.0.1:8080
 ```
 
-Live Vaultwarden smoke-test instructions are in
-[`docs/live-testing.md`](docs/live-testing.md).
+For Bitwarden Cloud, configure split endpoints instead of `VWSO_VAULTWARDEN_URL`:
+
+```bash
+VWSO_IDENTITY_URL="https://identity.bitwarden.com" \
+VWSO_API_URL="https://api.bitwarden.com" \
+VWSO_CLIENT_ID="user.<uuid>" \
+VWSO_CLIENT_SECRET="..." \
+VWSO_MASTER_PASSWORD="..." \
+VWSO_CACHE_TTL_SECONDS=60 \
+cargo run -p vwso-eso-webhook -- --listen 127.0.0.1:8080
+```
+
+Compatibility details are in [`docs/compatibility.md`](docs/compatibility.md).
+Live smoke-test instructions are in [`docs/live-testing.md`](docs/live-testing.md).
 
 ## License
 

@@ -2,7 +2,7 @@
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use axum::{
     extract::State,
     response::IntoResponse,
@@ -18,7 +18,7 @@ use vwso_core::{require_non_empty, RemoteRef, SecretDocument};
 use vwso_vaultwarden::{
     CipherError, VaultwardenApiClient, VaultwardenApiError, VaultwardenAuth,
     VaultwardenCacheConfig, VaultwardenClientError, VaultwardenDevice, VaultwardenEndpoint,
-    VaultwardenProvider, VaultwardenSelector,
+    VaultwardenEndpoints, VaultwardenProvider, VaultwardenSelector,
 };
 
 #[derive(Parser)]
@@ -27,7 +27,11 @@ struct Args {
     #[arg(long, env = "VWSO_LISTEN", default_value = "0.0.0.0:8080")]
     listen: SocketAddr,
     #[arg(long, env = "VWSO_VAULTWARDEN_URL")]
-    vaultwarden_url: String,
+    vaultwarden_url: Option<String>,
+    #[arg(long, env = "VWSO_IDENTITY_URL")]
+    identity_url: Option<String>,
+    #[arg(long, env = "VWSO_API_URL")]
+    api_url: Option<String>,
     #[arg(long, env = "VWSO_CLIENT_ID")]
     client_id: String,
     #[arg(long, env = "VWSO_CLIENT_SECRET")]
@@ -96,8 +100,7 @@ fn provider_from_args(args: Args) -> anyhow::Result<Arc<dyn VaultwardenProvider>
     require_non_empty(&args.device_identifier, "device_identifier")?;
     require_non_empty(&args.device_name, "device_name")?;
 
-    let endpoint = VaultwardenEndpoint::parse(&args.vaultwarden_url)
-        .context("invalid Vaultwarden endpoint configuration")?;
+    let endpoints = endpoints_from_args(&args)?;
     let auth = VaultwardenAuth {
         client_id: args.client_id,
         client_secret: args.client_secret.into(),
@@ -109,11 +112,37 @@ fn provider_from_args(args: Args) -> anyhow::Result<Arc<dyn VaultwardenProvider>
         name: args.device_name,
     };
     let cache_config = VaultwardenCacheConfig::new(Duration::from_secs(args.cache_ttl_seconds));
-    let provider =
-        VaultwardenApiClient::with_device_and_cache(endpoint, auth, device, cache_config)
-            .context("failed to build Vaultwarden API client")?;
+    let provider = VaultwardenApiClient::with_endpoints_device_and_cache(
+        endpoints,
+        auth,
+        device,
+        cache_config,
+    )
+    .context("failed to build Bitwarden-compatible API client")?;
 
     Ok(Arc::new(provider))
+}
+
+fn endpoints_from_args(args: &Args) -> anyhow::Result<VaultwardenEndpoints> {
+    match (&args.vaultwarden_url, &args.identity_url, &args.api_url) {
+        (Some(vaultwarden_url), None, None) => {
+            let endpoint = VaultwardenEndpoint::parse(vaultwarden_url)
+                .context("invalid single-origin Vaultwarden/Bitwarden endpoint configuration")?;
+            Ok(VaultwardenEndpoints::from_single_origin(endpoint))
+        }
+        (None, Some(identity_url), Some(api_url)) => {
+            VaultwardenEndpoints::parse_split(identity_url, api_url)
+                .context("invalid split Bitwarden endpoint configuration")
+        }
+        (Some(_), Some(_), _) | (Some(_), _, Some(_)) => {
+            bail!(
+                "configure either VWSO_VAULTWARDEN_URL or both VWSO_IDENTITY_URL and VWSO_API_URL, not both endpoint modes"
+            )
+        }
+        _ => bail!(
+            "configure VWSO_VAULTWARDEN_URL for single-origin Vaultwarden/self-hosted Bitwarden, or both VWSO_IDENTITY_URL and VWSO_API_URL for split Bitwarden endpoints"
+        ),
+    }
 }
 
 fn build_router(state: AppState) -> Router {
@@ -217,7 +246,9 @@ mod tests {
     fn valid_args() -> Args {
         Args {
             listen: SocketAddr::from(([127, 0, 0, 1], 8080)),
-            vaultwarden_url: "http://127.0.0.1:8081".to_string(),
+            vaultwarden_url: Some("http://127.0.0.1:8081".to_string()),
+            identity_url: None,
+            api_url: None,
             client_id: "user.fixture".to_string(),
             client_secret: "super-secret-api-key".to_string(),
             master_password: "super-secret-master-password".to_string(),
@@ -231,16 +262,58 @@ mod tests {
     #[test]
     fn provider_config_rejects_insecure_remote_endpoint() {
         let mut args = valid_args();
-        args.vaultwarden_url = "http://vault.example.test".to_string();
+        args.vaultwarden_url = Some("http://vault.example.test".to_string());
 
         let Some(error) = provider_from_args(args).err() else {
             unreachable!("insecure remote endpoint should fail");
         };
         let error = format!("{error:#}");
 
-        assert!(error.contains("invalid Vaultwarden endpoint configuration"));
+        assert!(
+            error.contains("invalid single-origin Vaultwarden/Bitwarden endpoint configuration")
+        );
         assert!(!error.contains("super-secret-api-key"));
         assert!(!error.contains("super-secret-master-password"));
+    }
+
+    #[test]
+    fn provider_config_accepts_split_bitwarden_endpoints() {
+        let mut args = valid_args();
+        args.vaultwarden_url = None;
+        args.identity_url = Some("http://127.0.0.1:8081".to_string());
+        args.api_url = Some("http://127.0.0.1:8082".to_string());
+
+        if let Err(error) = provider_from_args(args) {
+            unreachable!("local split endpoints should be accepted: {error:#}");
+        }
+    }
+
+    #[test]
+    fn provider_config_rejects_partial_split_endpoints() {
+        let mut args = valid_args();
+        args.vaultwarden_url = None;
+        args.identity_url = Some("http://127.0.0.1:8081".to_string());
+
+        let Some(error) = provider_from_args(args).err() else {
+            unreachable!("partial split endpoint configuration should fail");
+        };
+
+        assert!(error
+            .to_string()
+            .contains("both VWSO_IDENTITY_URL and VWSO_API_URL"));
+    }
+
+    #[test]
+    fn provider_config_rejects_mixed_endpoint_modes() {
+        let mut args = valid_args();
+        args.identity_url = Some("https://identity.bitwarden.com".to_string());
+        args.api_url = Some("https://api.bitwarden.com".to_string());
+
+        let Some(error) = provider_from_args(args).err() else {
+            unreachable!("mixed endpoint modes should fail");
+        };
+
+        assert!(error.to_string().contains("not both endpoint modes"));
     }
 
     #[test]

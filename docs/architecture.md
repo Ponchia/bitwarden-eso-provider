@@ -2,9 +2,9 @@
 
 ## Goal
 
-Provide a serious, public-ready path for syncing Vaultwarden-backed Bitwarden
-Password Manager items into Kubernetes without making Vaultwarden item metadata
-the Kubernetes control plane.
+Provide a serious, public-ready path for syncing Vaultwarden or Bitwarden
+Password Manager items into Kubernetes without making vault item metadata the
+Kubernetes control plane.
 
 ## Initial Shape
 
@@ -14,17 +14,17 @@ The first target is an External Secrets Operator webhook provider:
 ExternalSecret
   -> SecretStore(provider.webhook)
   -> vwso-eso-webhook
-  -> Vaultwarden-compatible API
+  -> Bitwarden-compatible API
   -> decrypted item fields
   -> ESO-managed Kubernetes Secret
 ```
 
 This project should own:
 
-- Vaultwarden-compatible authentication.
+- Bitwarden-compatible authentication.
 - Local decryption and field extraction.
 - Master-password user-key unlock.
-- Vaultwarden API-key login and sync.
+- Vaultwarden and Bitwarden API-key login and sync.
 - Provider-level caching and rate limiting.
 - Redacted logs, metrics, and health checks.
 - A small HTTP contract usable by ESO's generic webhook provider.

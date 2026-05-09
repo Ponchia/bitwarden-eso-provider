@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 
-//! Vaultwarden-compatible client boundary.
+//! Vaultwarden/Bitwarden-compatible client boundary.
 //!
 //! This crate will hold API, authentication, and decryption code. It currently
 //! exposes a narrow trait so adapters can be built and tested before the
-//! Vaultwarden implementation is filled in.
+//! HTTP provider implementation is filled in.
 
 pub mod api;
 pub mod cipher;
@@ -32,14 +32,15 @@ pub use keys::{
     MasterPasswordUnlockData,
 };
 
-/// Vaultwarden endpoint configuration.
+/// Single-origin Vaultwarden or self-hosted Bitwarden endpoint configuration.
 #[derive(Debug, Clone)]
 pub struct VaultwardenEndpoint {
     base_url: Url,
 }
 
 impl VaultwardenEndpoint {
-    /// Parse and validate a Vaultwarden base URL.
+    /// Parse and validate a single-origin Vaultwarden or self-hosted Bitwarden
+    /// base URL.
     ///
     /// HTTP is allowed only for localhost development endpoints. Production
     /// deployments must use HTTPS.
@@ -49,7 +50,11 @@ impl VaultwardenEndpoint {
     /// Returns an error when the URL is empty, malformed, or uses an insecure
     /// non-local transport.
     pub fn parse(raw: &str) -> Result<Self, VaultwardenClientError> {
-        require_non_empty(raw, "vaultwarden_url")?;
+        Self::parse_named(raw, "vaultwarden_url")
+    }
+
+    fn parse_named(raw: &str, field_name: &'static str) -> Result<Self, VaultwardenClientError> {
+        require_non_empty(raw, field_name)?;
         let base_url =
             Url::parse(raw).map_err(|source| VaultwardenClientError::InvalidEndpoint { source })?;
 
@@ -69,7 +74,78 @@ impl VaultwardenEndpoint {
     }
 }
 
-/// Authentication material for a dedicated Vaultwarden user.
+/// Fully resolved Bitwarden-compatible endpoint bases.
+#[derive(Debug, Clone)]
+pub struct VaultwardenEndpoints {
+    identity_url: Url,
+    api_url: Url,
+}
+
+impl VaultwardenEndpoints {
+    /// Build endpoint bases from a single Vaultwarden or self-hosted Bitwarden
+    /// origin.
+    #[must_use]
+    pub fn from_single_origin(endpoint: VaultwardenEndpoint) -> Self {
+        let base_url = endpoint.base_url;
+
+        Self {
+            identity_url: append_path_segments(&base_url, &["identity"]),
+            api_url: append_path_segments(&base_url, &["api"]),
+        }
+    }
+
+    /// Parse explicit identity and API endpoint bases.
+    ///
+    /// This is the mode used by Bitwarden Cloud, for example
+    /// `https://identity.bitwarden.com` plus `https://api.bitwarden.com`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when either URL is empty, malformed, or uses an
+    /// insecure non-local transport.
+    pub fn parse_split(identity_url: &str, api_url: &str) -> Result<Self, VaultwardenClientError> {
+        let identity = VaultwardenEndpoint::parse_named(identity_url, "identity_url")?;
+        let api = VaultwardenEndpoint::parse_named(api_url, "api_url")?;
+
+        Ok(Self {
+            identity_url: normalize_endpoint_base(identity.base_url()),
+            api_url: normalize_endpoint_base(api.base_url()),
+        })
+    }
+
+    /// Return the configured identity endpoint base.
+    #[must_use]
+    pub fn identity_url(&self) -> &Url {
+        &self.identity_url
+    }
+
+    /// Return the configured API endpoint base.
+    #[must_use]
+    pub fn api_url(&self) -> &Url {
+        &self.api_url
+    }
+}
+
+fn normalize_endpoint_base(base_url: &Url) -> Url {
+    append_path_segments(base_url, &[])
+}
+
+fn append_path_segments(base_url: &Url, segments: &[&str]) -> Url {
+    let mut url = base_url.clone();
+    url.set_query(None);
+    url.set_fragment(None);
+
+    let mut path = url.path().trim_end_matches('/').to_string();
+    for segment in segments {
+        path.push('/');
+        path.push_str(segment.trim_matches('/'));
+    }
+    url.set_path(&path);
+
+    url
+}
+
+/// Authentication material for a dedicated Vaultwarden or Bitwarden user.
 #[derive(Clone)]
 pub struct VaultwardenAuth {
     /// User API key client ID.
@@ -80,10 +156,10 @@ pub struct VaultwardenAuth {
     pub master_password: SecretString,
 }
 
-/// Source selector understood by the Vaultwarden provider.
+/// Source selector understood by the Bitwarden-compatible provider.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct VaultwardenSelector {
-    /// Vaultwarden item key, ID, or stable path.
+    /// Vault item key, ID, or stable path.
     pub key: String,
     /// Optional item field to extract.
     pub property: Option<String>,
@@ -104,12 +180,12 @@ impl TryFrom<RemoteRef> for VaultwardenSelector {
 /// Provider boundary used by Kubernetes-facing adapters.
 #[async_trait]
 pub trait VaultwardenProvider: Send + Sync {
-    /// Resolve a Vaultwarden selector into a secret document.
+    /// Resolve a selector into a secret document.
     ///
     /// # Errors
     ///
     /// Returns an error when the provider cannot authenticate, locate, decrypt,
-    /// or map the selected Vaultwarden item.
+    /// or map the selected vault item.
     async fn resolve(
         &self,
         selector: VaultwardenSelector,
@@ -130,7 +206,7 @@ impl VaultwardenProvider for NotImplementedProvider {
     }
 }
 
-/// Errors returned by the Vaultwarden client boundary.
+/// Errors returned by the Bitwarden-compatible client boundary.
 #[derive(Debug, Error)]
 pub enum VaultwardenClientError {
     /// Shared validation failure.
@@ -145,7 +221,7 @@ pub enum VaultwardenClientError {
     /// Master-password key derivation or unlock failure.
     #[error(transparent)]
     KeyDerivation(#[from] KeyDerivationError),
-    /// Vaultwarden HTTP API failure.
+    /// Bitwarden-compatible HTTP API failure.
     #[error(transparent)]
     Api(#[from] VaultwardenApiError),
     /// URL parsing failed.
@@ -156,7 +232,7 @@ pub enum VaultwardenClientError {
         source: url::ParseError,
     },
     /// Endpoint does not meet transport security requirements.
-    #[error("Vaultwarden endpoint must use HTTPS except for localhost development")]
+    #[error("Bitwarden-compatible endpoint must use HTTPS except for localhost development")]
     InsecureEndpoint,
     /// Requested operation is not implemented yet.
     #[error("Vaultwarden resolution is not implemented for key {key}")]
@@ -187,6 +263,53 @@ mod tests {
         };
 
         assert_eq!(endpoint.base_url().scheme(), "http");
+    }
+
+    #[test]
+    fn single_origin_endpoints_append_identity_and_api_paths() {
+        let endpoint = match VaultwardenEndpoint::parse("https://vault.example.test/base/") {
+            Ok(endpoint) => endpoint,
+            Err(error) => unreachable!("endpoint should parse: {error}"),
+        };
+        let endpoints = VaultwardenEndpoints::from_single_origin(endpoint);
+
+        assert_eq!(
+            endpoints.identity_url().as_str(),
+            "https://vault.example.test/base/identity"
+        );
+        assert_eq!(
+            endpoints.api_url().as_str(),
+            "https://vault.example.test/base/api"
+        );
+    }
+
+    #[test]
+    fn split_endpoints_keep_identity_and_api_bases_separate() {
+        let endpoints = match VaultwardenEndpoints::parse_split(
+            "https://identity.bitwarden.com/",
+            "https://api.bitwarden.com/",
+        ) {
+            Ok(endpoints) => endpoints,
+            Err(error) => unreachable!("split endpoints should parse: {error}"),
+        };
+
+        assert_eq!(
+            endpoints.identity_url().as_str(),
+            "https://identity.bitwarden.com/"
+        );
+        assert_eq!(endpoints.api_url().as_str(), "https://api.bitwarden.com/");
+    }
+
+    #[test]
+    fn split_endpoints_reject_insecure_remote_http() {
+        let Err(err) = VaultwardenEndpoints::parse_split(
+            "https://identity.bitwarden.com",
+            "http://api.example.test",
+        ) else {
+            unreachable!("split endpoints should reject insecure remote HTTP");
+        };
+
+        assert!(matches!(err, VaultwardenClientError::InsecureEndpoint));
     }
 
     #[test]

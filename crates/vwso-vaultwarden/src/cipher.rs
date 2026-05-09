@@ -1,4 +1,4 @@
-//! Vaultwarden cipher response models and field extraction.
+//! Bitwarden-compatible cipher response models and field extraction.
 
 use serde::Deserialize;
 use thiserror::Error;
@@ -7,7 +7,7 @@ use zeroize::Zeroize;
 
 use crate::crypto::{AuthenticatedSymmetricKey, CryptoError, EncryptedString};
 
-/// Encrypted Vaultwarden cipher as returned by sync and cipher detail APIs.
+/// Encrypted Bitwarden-compatible cipher as returned by sync and cipher detail APIs.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EncryptedCipher {
