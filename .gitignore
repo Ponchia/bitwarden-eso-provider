@@ -1,0 +1,21 @@
+/target/
+/.idea/
+/.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Generated coverage and reports
+/coverage/
+/tarpaulin-report.html
+/junit.xml
+

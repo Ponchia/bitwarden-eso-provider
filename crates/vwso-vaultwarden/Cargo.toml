@@ -1,0 +1,18 @@
+[package]
+name = "vwso-vaultwarden"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+async-trait.workspace = true
+secrecy.workspace = true
+thiserror.workspace = true
+url.workspace = true
+vwso-core = { path = "../vwso-core" }
+

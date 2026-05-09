@@ -1,0 +1,42 @@
+[workspace]
+members = [
+    "crates/vwso-core",
+    "crates/vwso-vaultwarden",
+    "crates/vwso-eso-webhook",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.82"
+license = "Apache-2.0"
+authors = ["Zeno Rocha"]
+repository = "https://github.com/ponchia/vaultwarden-secrets-operator"
+homepage = "https://github.com/ponchia/vaultwarden-secrets-operator"
+readme = "README.md"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+[workspace.dependencies]
+anyhow = "1.0"
+async-trait = "0.1"
+axum = { version = "0.7", features = ["macros"] }
+clap = { version = "4.5", features = ["derive", "env"] }
+http = "1.1"
+secrecy = "0.10"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "signal", "net"] }
+tower-http = { version = "0.6", features = ["trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+url = "2.5"
