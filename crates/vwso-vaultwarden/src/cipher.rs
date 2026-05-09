@@ -2,6 +2,8 @@
 
 use serde::Deserialize;
 use thiserror::Error;
+use vwso_core::SecretDocument;
+use zeroize::Zeroize;
 
 use crate::crypto::{AuthenticatedSymmetricKey, CryptoError, EncryptedString};
 
@@ -45,22 +47,33 @@ impl EncryptedCipher {
     /// Returns an error when any encrypted string is malformed, fails MAC
     /// verification, or cannot be decoded as UTF-8.
     pub fn decrypt(&self, key: &AuthenticatedSymmetricKey) -> Result<DecryptedCipher, CipherError> {
-        let name = decrypt_optional(self.name.as_deref(), key)?;
-        let notes = decrypt_optional(self.notes.as_deref(), key)?;
+        let cipher_key;
+        let decryption_key = if let Some(wrapped_key) = self.key.as_deref() {
+            let mut plain = wrapped_key.parse::<EncryptedString>()?.decrypt_bytes(key)?;
+            let parsed_key = AuthenticatedSymmetricKey::try_from(plain.as_slice())?;
+            plain.zeroize();
+            cipher_key = parsed_key;
+            &cipher_key
+        } else {
+            key
+        };
+
+        let name = decrypt_optional(self.name.as_deref(), decryption_key)?;
+        let notes = decrypt_optional(self.notes.as_deref(), decryption_key)?;
         let fields = self
             .fields
             .iter()
-            .map(|field| field.decrypt(key))
+            .map(|field| field.decrypt(decryption_key))
             .collect::<Result<Vec<_>, _>>()?;
         let login = self
             .login
             .as_ref()
-            .map(|login| login.decrypt(key))
+            .map(|login| login.decrypt(decryption_key))
             .transpose()?;
         let ssh_key = self
             .ssh_key
             .as_ref()
-            .map(|ssh_key| ssh_key.decrypt(key))
+            .map(|ssh_key| ssh_key.decrypt(decryption_key))
             .transpose()?;
 
         Ok(DecryptedCipher {
@@ -250,6 +263,63 @@ impl DecryptedCipher {
                 property: property.to_string(),
             })
     }
+
+    /// Convert all conventional fields on this cipher into a secret document.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the decrypted cipher has no extractable secret
+    /// values.
+    pub fn to_secret_document(&self) -> Result<SecretDocument, CipherError> {
+        let mut document = SecretDocument::default();
+
+        insert_optional(&mut document, "notes", self.notes.as_deref());
+
+        if let Some(login) = &self.login {
+            insert_optional(&mut document, "username", login.username.as_deref());
+            insert_optional(&mut document, "password", login.password.as_deref());
+            insert_optional(&mut document, "totp", login.totp.as_deref());
+        }
+
+        if let Some(ssh_key) = &self.ssh_key {
+            insert_optional(&mut document, "privateKey", ssh_key.private_key.as_deref());
+            insert_optional(&mut document, "publicKey", ssh_key.public_key.as_deref());
+            insert_optional(
+                &mut document,
+                "keyFingerprint",
+                ssh_key.key_fingerprint.as_deref(),
+            );
+        }
+
+        for field in &self.fields {
+            if let (Some(name), Some(value)) = (&field.name, &field.value) {
+                if !name.trim().is_empty() {
+                    document.data.insert(name.clone(), value.clone());
+                }
+            }
+        }
+
+        if document.data.is_empty() {
+            return Err(CipherError::NoExtractableFields {
+                id: self.id.clone(),
+            });
+        }
+
+        if let Some(name) = &self.name {
+            document
+                .metadata
+                .insert("vaultwarden.name".to_string(), name.clone());
+        }
+        document
+            .metadata
+            .insert("vaultwarden.cipherId".to_string(), self.id.clone());
+        document.metadata.insert(
+            "vaultwarden.cipherType".to_string(),
+            self.cipher_type.to_string(),
+        );
+
+        Ok(document)
+    }
 }
 
 /// Decrypted custom field.
@@ -300,6 +370,12 @@ pub enum CipherError {
         /// Requested property name.
         property: String,
     },
+    /// The cipher has no conventional fields that can be mapped to a Secret.
+    #[error("cipher {id} has no extractable secret fields")]
+    NoExtractableFields {
+        /// Cipher identifier.
+        id: String,
+    },
 }
 
 fn decrypt_optional(
@@ -318,6 +394,12 @@ fn existing(property: &str, value: Option<&str>) -> Result<String, CipherError> 
         .ok_or_else(|| CipherError::MissingProperty {
             property: property.to_string(),
         })
+}
+
+fn insert_optional(document: &mut SecretDocument, key: &str, value: Option<&str>) {
+    if let Some(value) = value {
+        document.data.insert(key.to_string(), value.to_string());
+    }
 }
 
 #[cfg(test)]

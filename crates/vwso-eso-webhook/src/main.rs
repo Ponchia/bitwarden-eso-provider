@@ -15,8 +15,8 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use vwso_core::{RemoteRef, SecretDocument};
 use vwso_vaultwarden::{
-    CipherError, NotImplementedProvider, VaultwardenClientError, VaultwardenProvider,
-    VaultwardenSelector,
+    CipherError, NotImplementedProvider, VaultwardenApiError, VaultwardenClientError,
+    VaultwardenProvider, VaultwardenSelector,
 };
 
 #[derive(Debug, Parser)]
@@ -104,12 +104,24 @@ fn provider_error(error: &VaultwardenClientError) -> (StatusCode, Json<ErrorResp
     let status = match error {
         VaultwardenClientError::Validation(_)
         | VaultwardenClientError::Cipher(CipherError::BlankProperty) => StatusCode::BAD_REQUEST,
-        VaultwardenClientError::Cipher(CipherError::MissingProperty { .. }) => {
+        VaultwardenClientError::Cipher(CipherError::MissingProperty { .. })
+        | VaultwardenClientError::Api(VaultwardenApiError::CipherNotFound { .. }) => {
             StatusCode::NOT_FOUND
         }
+        VaultwardenClientError::Api(
+            VaultwardenApiError::Http(_) | VaultwardenApiError::HttpStatus { .. },
+        ) => StatusCode::BAD_GATEWAY,
         VaultwardenClientError::Crypto(_)
-        | VaultwardenClientError::Cipher(CipherError::Crypto(_))
+        | VaultwardenClientError::Cipher(
+            CipherError::Crypto(_) | CipherError::NoExtractableFields { .. },
+        )
         | VaultwardenClientError::KeyDerivation(_)
+        | VaultwardenClientError::Api(
+            VaultwardenApiError::InvalidBaseUrl
+            | VaultwardenApiError::UnsupportedKdfType { .. }
+            | VaultwardenApiError::MissingKdfParameter { .. }
+            | VaultwardenApiError::MissingMasterPasswordUnlock,
+        )
         | VaultwardenClientError::InvalidEndpoint { .. }
         | VaultwardenClientError::InsecureEndpoint => StatusCode::INTERNAL_SERVER_ERROR,
         VaultwardenClientError::NotImplemented { .. } => StatusCode::NOT_IMPLEMENTED,

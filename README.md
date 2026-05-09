@@ -18,15 +18,22 @@ Vaultwarden-compatible APIs and resolving encrypted vault items.
 
 ## Status
 
-Pre-implementation scaffold. Do not deploy yet.
+Early implementation. Do not deploy yet.
 
 The current repository contains:
 
 - A Rust workspace with core model, Vaultwarden client boundary, and ESO webhook
   entrypoint crates.
+- Bitwarden-compatible authenticated encrypted string decryption.
+- Master-password user-key unlock for PBKDF2-SHA256 and Argon2id accounts.
+- A tested Vaultwarden API-key login and sync client path backed by a local fake
+  server.
 - Architecture, threat-model, and reference notes.
 - Example External Secrets Operator manifests.
 - CI scaffolding for formatting, clippy, and tests.
+
+The webhook binary still starts with a placeholder provider until configuration,
+credential loading, caching, and deployment wiring are implemented.
 
 ## Design Principles
 
@@ -70,4 +77,3 @@ cargo run -p vwso-eso-webhook -- --listen 127.0.0.1:8080
 
 Apache-2.0. Keep this repo free of copied code from reference projects unless a
 license review explicitly approves it.
-

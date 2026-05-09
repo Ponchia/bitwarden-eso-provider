@@ -6,6 +6,7 @@
 //! exposes a narrow trait so adapters can be built and tested before the
 //! Vaultwarden implementation is filled in.
 
+pub mod api;
 pub mod cipher;
 pub mod crypto;
 pub mod keys;
@@ -16,6 +17,9 @@ use thiserror::Error;
 use url::Url;
 use vwso_core::{require_non_empty, RemoteRef, SecretDocument, ValidationError};
 
+pub use api::{
+    SyncResponse, VaultwardenApiClient, VaultwardenApiError, VaultwardenDevice, VaultwardenSession,
+};
 pub use cipher::{
     CipherError, DecryptedCipher, DecryptedField, DecryptedLogin, DecryptedSshKey, EncryptedCipher,
     EncryptedField, EncryptedLogin, EncryptedSshKey,
@@ -140,6 +144,9 @@ pub enum VaultwardenClientError {
     /// Master-password key derivation or unlock failure.
     #[error(transparent)]
     KeyDerivation(#[from] KeyDerivationError),
+    /// Vaultwarden HTTP API failure.
+    #[error(transparent)]
+    Api(#[from] VaultwardenApiError),
     /// URL parsing failed.
     #[error("invalid Vaultwarden endpoint")]
     InvalidEndpoint {

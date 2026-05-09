@@ -23,6 +23,8 @@ This project should own:
 
 - Vaultwarden-compatible authentication.
 - Local decryption and field extraction.
+- Master-password user-key unlock.
+- Vaultwarden API-key login and sync.
 - Provider-level caching and rate limiting.
 - Redacted logs, metrics, and health checks.
 - A small HTTP contract usable by ESO's generic webhook provider.
@@ -51,4 +53,3 @@ premature CRD and gives the project a narrow, testable first milestone.
 - Native Rust controller with `kube-rs` if we need Vaultwarden-specific CRDs.
 - Secrets Store CSI provider only if file mount semantics become a first-class
   target.
-
