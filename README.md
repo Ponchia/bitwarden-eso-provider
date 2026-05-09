@@ -27,13 +27,13 @@ The current repository contains:
 - Bitwarden-compatible authenticated encrypted string decryption.
 - Master-password user-key unlock for PBKDF2-SHA256 and Argon2id accounts.
 - A tested Vaultwarden API-key login and sync client path backed by a local fake
-  server.
+  server, wired into the ESO webhook runtime through environment configuration.
 - Architecture, threat-model, and reference notes.
 - Example External Secrets Operator manifests.
 - CI scaffolding for formatting, clippy, and tests.
 
-The webhook binary still starts with a placeholder provider until configuration,
-credential loading, caching, and deployment wiring are implemented.
+The webhook binary still needs caching, deployment manifests, and live
+Vaultwarden/kind integration tests before it should be deployed.
 
 ## Design Principles
 
@@ -67,9 +67,13 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --all-targets
 ```
 
-Run the webhook placeholder locally:
+Run the webhook locally:
 
 ```bash
+VWSO_VAULTWARDEN_URL="https://vaultwarden.example.com" \
+VWSO_CLIENT_ID="user.<uuid>" \
+VWSO_CLIENT_SECRET="..." \
+VWSO_MASTER_PASSWORD="..." \
 cargo run -p vwso-eso-webhook -- --listen 127.0.0.1:8080
 ```
 

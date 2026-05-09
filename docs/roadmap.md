@@ -18,9 +18,9 @@ Initial notes on authenticated encrypted string handling live in
 - Implement vault unlock and item decryption with tests from deterministic
   fixtures.
 - Add field extraction for login, secure note, SSH key, and custom fields.
+- Wire runtime configuration into `vwso-eso-webhook`.
 - Add cache with explicit TTL and redacted metrics.
 - Add a local CLI smoke-test command.
-- Wire runtime configuration into `vwso-eso-webhook`.
 
 ## Phase 2: ESO Webhook
 

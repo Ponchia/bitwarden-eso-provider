@@ -2,6 +2,7 @@
 
 use std::{net::SocketAddr, sync::Arc};
 
+use anyhow::Context;
 use axum::{
     extract::State,
     response::IntoResponse,
@@ -13,17 +14,40 @@ use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
-use vwso_core::{RemoteRef, SecretDocument};
+use vwso_core::{require_non_empty, RemoteRef, SecretDocument};
 use vwso_vaultwarden::{
-    CipherError, NotImplementedProvider, VaultwardenApiError, VaultwardenClientError,
-    VaultwardenProvider, VaultwardenSelector,
+    CipherError, VaultwardenApiClient, VaultwardenApiError, VaultwardenAuth,
+    VaultwardenClientError, VaultwardenDevice, VaultwardenEndpoint, VaultwardenProvider,
+    VaultwardenSelector,
 };
 
-#[derive(Debug, Parser)]
+#[derive(Parser)]
 #[command(author, version, about)]
 struct Args {
     #[arg(long, env = "VWSO_LISTEN", default_value = "0.0.0.0:8080")]
     listen: SocketAddr,
+    #[arg(long, env = "VWSO_VAULTWARDEN_URL")]
+    vaultwarden_url: String,
+    #[arg(long, env = "VWSO_CLIENT_ID")]
+    client_id: String,
+    #[arg(long, env = "VWSO_CLIENT_SECRET")]
+    client_secret: String,
+    #[arg(long, env = "VWSO_MASTER_PASSWORD")]
+    master_password: String,
+    #[arg(
+        long,
+        env = "VWSO_DEVICE_IDENTIFIER",
+        default_value = "vaultwarden-secrets-operator"
+    )]
+    device_identifier: String,
+    #[arg(
+        long,
+        env = "VWSO_DEVICE_NAME",
+        default_value = "Vaultwarden Secrets Operator"
+    )]
+    device_name: String,
+    #[arg(long, env = "VWSO_DEVICE_TYPE", default_value_t = 22)]
+    device_type: u8,
 }
 
 #[derive(Clone)]
@@ -47,19 +71,45 @@ struct ErrorResponse {
 async fn main() -> anyhow::Result<()> {
     init_tracing();
     let args = Args::parse();
+    let listen = args.listen;
 
     let state = AppState {
-        provider: Arc::new(NotImplementedProvider),
+        provider: provider_from_args(args)?,
     };
 
     let app = build_router(state);
 
-    let listener = tokio::net::TcpListener::bind(args.listen).await?;
-    tracing::info!(address = %args.listen, "starting ESO webhook provider");
+    let listener = tokio::net::TcpListener::bind(listen).await?;
+    tracing::info!(address = %listen, "starting ESO webhook provider");
 
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+fn provider_from_args(args: Args) -> anyhow::Result<Arc<dyn VaultwardenProvider>> {
+    require_non_empty(&args.client_id, "client_id")?;
+    require_non_empty(&args.client_secret, "client_secret")?;
+    require_non_empty(&args.master_password, "master_password")?;
+    require_non_empty(&args.device_identifier, "device_identifier")?;
+    require_non_empty(&args.device_name, "device_name")?;
+
+    let endpoint = VaultwardenEndpoint::parse(&args.vaultwarden_url)
+        .context("invalid Vaultwarden endpoint configuration")?;
+    let auth = VaultwardenAuth {
+        client_id: args.client_id,
+        client_secret: args.client_secret.into(),
+        master_password: args.master_password.into(),
+    };
+    let device = VaultwardenDevice {
+        device_type: args.device_type,
+        identifier: args.device_identifier,
+        name: args.device_name,
+    };
+    let provider = VaultwardenApiClient::with_device(endpoint, auth, device)
+        .context("failed to build Vaultwarden API client")?;
+
+    Ok(Arc::new(provider))
 }
 
 fn build_router(state: AppState) -> Router {
@@ -137,6 +187,7 @@ mod tests {
     use axum::body::{to_bytes, Body};
     use http::{header, Method, Request};
     use tower::ServiceExt;
+    use vwso_vaultwarden::NotImplementedProvider;
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -156,6 +207,48 @@ mod tests {
 
     fn test_app(provider: Arc<dyn VaultwardenProvider>) -> Router {
         build_router(AppState { provider })
+    }
+
+    fn valid_args() -> Args {
+        Args {
+            listen: SocketAddr::from(([127, 0, 0, 1], 8080)),
+            vaultwarden_url: "http://127.0.0.1:8081".to_string(),
+            client_id: "user.fixture".to_string(),
+            client_secret: "super-secret-api-key".to_string(),
+            master_password: "super-secret-master-password".to_string(),
+            device_identifier: "vwso-test".to_string(),
+            device_name: "VWSO Test".to_string(),
+            device_type: 22,
+        }
+    }
+
+    #[test]
+    fn provider_config_rejects_insecure_remote_endpoint() {
+        let mut args = valid_args();
+        args.vaultwarden_url = "http://vault.example.test".to_string();
+
+        let Some(error) = provider_from_args(args).err() else {
+            unreachable!("insecure remote endpoint should fail");
+        };
+        let error = format!("{error:#}");
+
+        assert!(error.contains("invalid Vaultwarden endpoint configuration"));
+        assert!(!error.contains("super-secret-api-key"));
+        assert!(!error.contains("super-secret-master-password"));
+    }
+
+    #[test]
+    fn provider_config_rejects_blank_credentials() {
+        let mut args = valid_args();
+        args.client_secret = " ".to_string();
+
+        let Some(error) = provider_from_args(args).err() else {
+            unreachable!("blank client secret should fail");
+        };
+
+        assert!(error
+            .to_string()
+            .contains("client_secret must not be empty"));
     }
 
     #[tokio::test]
