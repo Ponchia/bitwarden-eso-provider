@@ -31,7 +31,8 @@ The current repository contains:
 - In-memory sync caching with explicit TTL and single-flight refresh behavior.
 - Architecture, threat-model, and reference notes.
 - Example External Secrets Operator manifests.
-- CI scaffolding for formatting, clippy, and tests.
+- CI scaffolding for formatting, clippy, unit tests, fake-server tests, and an
+  opt-in live Vaultwarden smoke test.
 
 The webhook binary still needs deployment manifests, redacted metrics, and live
 Vaultwarden/kind integration tests before it should be deployed.
@@ -78,6 +79,9 @@ VWSO_MASTER_PASSWORD="..." \
 VWSO_CACHE_TTL_SECONDS=60 \
 cargo run -p vwso-eso-webhook -- --listen 127.0.0.1:8080
 ```
+
+Live Vaultwarden smoke-test instructions are in
+[`docs/live-testing.md`](docs/live-testing.md).
 
 ## License
 

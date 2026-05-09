@@ -22,6 +22,7 @@ Initial notes on authenticated encrypted string handling live in
 - Add cache with explicit TTL and single-flight refresh.
 - Add redacted metrics.
 - Add a local CLI smoke-test command.
+- Add opt-in live Vaultwarden smoke test.
 
 ## Phase 2: ESO Webhook
 
