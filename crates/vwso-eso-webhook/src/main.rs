@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::Context;
 use axum::{
@@ -17,8 +17,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 use vwso_core::{require_non_empty, RemoteRef, SecretDocument};
 use vwso_vaultwarden::{
     CipherError, VaultwardenApiClient, VaultwardenApiError, VaultwardenAuth,
-    VaultwardenClientError, VaultwardenDevice, VaultwardenEndpoint, VaultwardenProvider,
-    VaultwardenSelector,
+    VaultwardenCacheConfig, VaultwardenClientError, VaultwardenDevice, VaultwardenEndpoint,
+    VaultwardenProvider, VaultwardenSelector,
 };
 
 #[derive(Parser)]
@@ -48,6 +48,8 @@ struct Args {
     device_name: String,
     #[arg(long, env = "VWSO_DEVICE_TYPE", default_value_t = 22)]
     device_type: u8,
+    #[arg(long, env = "VWSO_CACHE_TTL_SECONDS", default_value_t = 60)]
+    cache_ttl_seconds: u64,
 }
 
 #[derive(Clone)]
@@ -106,8 +108,10 @@ fn provider_from_args(args: Args) -> anyhow::Result<Arc<dyn VaultwardenProvider>
         identifier: args.device_identifier,
         name: args.device_name,
     };
-    let provider = VaultwardenApiClient::with_device(endpoint, auth, device)
-        .context("failed to build Vaultwarden API client")?;
+    let cache_config = VaultwardenCacheConfig::new(Duration::from_secs(args.cache_ttl_seconds));
+    let provider =
+        VaultwardenApiClient::with_device_and_cache(endpoint, auth, device, cache_config)
+            .context("failed to build Vaultwarden API client")?;
 
     Ok(Arc::new(provider))
 }
@@ -170,7 +174,8 @@ fn provider_error(error: &VaultwardenClientError) -> (StatusCode, Json<ErrorResp
             VaultwardenApiError::InvalidBaseUrl
             | VaultwardenApiError::UnsupportedKdfType { .. }
             | VaultwardenApiError::MissingKdfParameter { .. }
-            | VaultwardenApiError::MissingMasterPasswordUnlock,
+            | VaultwardenApiError::MissingMasterPasswordUnlock
+            | VaultwardenApiError::MissingCachedSync,
         )
         | VaultwardenClientError::InvalidEndpoint { .. }
         | VaultwardenClientError::InsecureEndpoint => StatusCode::INTERNAL_SERVER_ERROR,
@@ -219,6 +224,7 @@ mod tests {
             device_identifier: "vwso-test".to_string(),
             device_name: "VWSO Test".to_string(),
             device_type: 22,
+            cache_ttl_seconds: 60,
         }
     }
 

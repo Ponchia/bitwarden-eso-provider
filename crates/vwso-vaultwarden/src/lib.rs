@@ -18,7 +18,8 @@ use url::Url;
 use vwso_core::{require_non_empty, RemoteRef, SecretDocument, ValidationError};
 
 pub use api::{
-    SyncResponse, VaultwardenApiClient, VaultwardenApiError, VaultwardenDevice, VaultwardenSession,
+    SyncResponse, VaultwardenApiClient, VaultwardenApiError, VaultwardenCacheConfig,
+    VaultwardenDevice, VaultwardenSession,
 };
 pub use cipher::{
     CipherError, DecryptedCipher, DecryptedField, DecryptedLogin, DecryptedSshKey, EncryptedCipher,

@@ -28,11 +28,12 @@ The current repository contains:
 - Master-password user-key unlock for PBKDF2-SHA256 and Argon2id accounts.
 - A tested Vaultwarden API-key login and sync client path backed by a local fake
   server, wired into the ESO webhook runtime through environment configuration.
+- In-memory sync caching with explicit TTL and single-flight refresh behavior.
 - Architecture, threat-model, and reference notes.
 - Example External Secrets Operator manifests.
 - CI scaffolding for formatting, clippy, and tests.
 
-The webhook binary still needs caching, deployment manifests, and live
+The webhook binary still needs deployment manifests, redacted metrics, and live
 Vaultwarden/kind integration tests before it should be deployed.
 
 ## Design Principles
@@ -74,6 +75,7 @@ VWSO_VAULTWARDEN_URL="https://vaultwarden.example.com" \
 VWSO_CLIENT_ID="user.<uuid>" \
 VWSO_CLIENT_SECRET="..." \
 VWSO_MASTER_PASSWORD="..." \
+VWSO_CACHE_TTL_SECONDS=60 \
 cargo run -p vwso-eso-webhook -- --listen 127.0.0.1:8080
 ```
 

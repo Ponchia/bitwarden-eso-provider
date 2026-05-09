@@ -1,10 +1,16 @@
 //! Vaultwarden HTTP API client and sync resolver.
 
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
 use async_trait::async_trait;
 use reqwest::{Client as HttpClient, Url};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio::sync::Mutex;
 use vwso_core::SecretDocument;
 
 use crate::{
@@ -15,6 +21,7 @@ use crate::{
 
 const BITWARDEN_CLIENT_VERSION: &str = "2025.12.0";
 const DEFAULT_DEVICE_TYPE_SERVER: u8 = 22;
+const DEFAULT_CACHE_TTL: Duration = Duration::from_secs(60);
 
 /// Vaultwarden HTTP API client.
 #[derive(Clone)]
@@ -23,6 +30,8 @@ pub struct VaultwardenApiClient {
     auth: VaultwardenAuth,
     http: HttpClient,
     device: VaultwardenDevice,
+    cache_config: VaultwardenCacheConfig,
+    cache: Arc<Mutex<Option<CachedVault>>>,
 }
 
 impl VaultwardenApiClient {
@@ -49,6 +58,21 @@ impl VaultwardenApiClient {
         auth: VaultwardenAuth,
         device: VaultwardenDevice,
     ) -> Result<Self, VaultwardenApiError> {
+        Self::with_device_and_cache(endpoint, auth, device, VaultwardenCacheConfig::default())
+    }
+
+    /// Build a Vaultwarden API client with explicit device identity and cache
+    /// settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP client cannot be constructed.
+    pub fn with_device_and_cache(
+        endpoint: VaultwardenEndpoint,
+        auth: VaultwardenAuth,
+        device: VaultwardenDevice,
+        cache_config: VaultwardenCacheConfig,
+    ) -> Result<Self, VaultwardenApiError> {
         let http = HttpClient::builder()
             .user_agent("vaultwarden-secrets-operator")
             .build()?;
@@ -58,6 +82,8 @@ impl VaultwardenApiClient {
             auth,
             http,
             device,
+            cache_config,
+            cache: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -162,6 +188,44 @@ impl VaultwardenApiClient {
         })
     }
 
+    async fn resolve_with_cached_sync(
+        &self,
+        selector: VaultwardenSelector,
+    ) -> Result<SecretDocument, VaultwardenClientError> {
+        let mut cache = self.cache.lock().await;
+
+        if cache
+            .as_ref()
+            .is_none_or(|cached| !cached.is_fresh(self.cache_config.ttl))
+        {
+            *cache = Some(self.fetch_vault().await?);
+        }
+
+        let cached = cache
+            .as_ref()
+            .ok_or(VaultwardenApiError::MissingCachedSync)?;
+        let cipher =
+            Self::resolve_synced_cipher(&cached.sync, &cached.session.user_key, &selector.key)?;
+
+        if let Some(property) = selector.property {
+            let value = cipher.extract_property(&property)?;
+            return Ok(SecretDocument::single(property.trim(), value));
+        }
+
+        Ok(cipher.to_secret_document()?)
+    }
+
+    async fn fetch_vault(&self) -> Result<CachedVault, VaultwardenClientError> {
+        let session = self.login_with_api_key().await?;
+        let sync = self.sync(&session).await?;
+
+        Ok(CachedVault {
+            session,
+            sync,
+            fetched_at: Instant::now(),
+        })
+    }
+
     fn resolve_synced_cipher(
         sync: &SyncResponse,
         user_key: &AuthenticatedSymmetricKey,
@@ -210,16 +274,51 @@ impl VaultwardenProvider for VaultwardenApiClient {
         &self,
         selector: VaultwardenSelector,
     ) -> Result<SecretDocument, VaultwardenClientError> {
-        let session = self.login_with_api_key().await?;
-        let sync = self.sync(&session).await?;
-        let cipher = Self::resolve_synced_cipher(&sync, &session.user_key, &selector.key)?;
+        self.resolve_with_cached_sync(selector).await
+    }
+}
 
-        if let Some(property) = selector.property {
-            let value = cipher.extract_property(&property)?;
-            return Ok(SecretDocument::single(property.trim(), value));
+/// In-memory cache settings for the API provider.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct VaultwardenCacheConfig {
+    /// Maximum age for the cached unlocked user key plus encrypted sync
+    /// response. A zero duration disables reuse across requests.
+    pub ttl: Duration,
+}
+
+impl VaultwardenCacheConfig {
+    /// Build cache settings with an explicit TTL.
+    #[must_use]
+    pub const fn new(ttl: Duration) -> Self {
+        Self { ttl }
+    }
+
+    /// Disable cache reuse across requests.
+    #[must_use]
+    pub const fn disabled() -> Self {
+        Self {
+            ttl: Duration::ZERO,
         }
+    }
+}
 
-        Ok(cipher.to_secret_document()?)
+impl Default for VaultwardenCacheConfig {
+    fn default() -> Self {
+        Self {
+            ttl: DEFAULT_CACHE_TTL,
+        }
+    }
+}
+
+struct CachedVault {
+    session: VaultwardenSession,
+    sync: SyncResponse,
+    fetched_at: Instant,
+}
+
+impl CachedVault {
+    fn is_fresh(&self, ttl: Duration) -> bool {
+        !ttl.is_zero() && self.fetched_at.elapsed() < ttl
     }
 }
 
@@ -467,6 +566,9 @@ pub enum VaultwardenApiError {
     /// API-key login did not return master-password unlock data.
     #[error("Vaultwarden token response did not include master-password unlock data")]
     MissingMasterPasswordUnlock,
+    /// Cache refresh did not produce a sync response.
+    #[error("Vaultwarden sync cache is empty after refresh")]
+    MissingCachedSync,
     /// Requested cipher was not present in the sync response.
     #[error("Vaultwarden cipher {key} was not found")]
     CipherNotFound {
@@ -477,7 +579,14 @@ pub enum VaultwardenApiError {
 
 #[cfg(test)]
 mod tests {
-    use std::net::SocketAddr;
+    use std::{
+        net::SocketAddr,
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        time::Duration,
+    };
 
     use axum::{
         extract::State,
@@ -522,6 +631,23 @@ mod tests {
     #[derive(Clone)]
     struct FakeState {
         cipher: serde_json::Value,
+        counters: FakeCounters,
+    }
+
+    #[derive(Clone, Default)]
+    struct FakeCounters {
+        token_requests: Arc<AtomicUsize>,
+        sync_requests: Arc<AtomicUsize>,
+    }
+
+    impl FakeCounters {
+        fn token_requests(&self) -> usize {
+            self.token_requests.load(Ordering::SeqCst)
+        }
+
+        fn sync_requests(&self) -> usize {
+            self.sync_requests.load(Ordering::SeqCst)
+        }
     }
 
     #[derive(Debug, Deserialize)]
@@ -592,8 +718,97 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn reuses_sync_cache_within_ttl() -> TestResult {
+        let (client, counters) =
+            fake_client_with_cache(VaultwardenCacheConfig::new(Duration::from_secs(60))).await?;
+        let selector = VaultwardenSelector::try_from(RemoteRef {
+            key: "app/database".to_string(),
+            property: Some("DATABASE_URL".to_string()),
+            version: None,
+        })?;
+
+        client.resolve(selector.clone()).await?;
+        client.resolve(selector).await?;
+
+        assert_eq!(counters.token_requests(), 1);
+        assert_eq!(counters.sync_requests(), 1);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn disabled_cache_refreshes_every_resolve() -> TestResult {
+        let (client, counters) = fake_client_with_cache(VaultwardenCacheConfig::disabled()).await?;
+        let selector = VaultwardenSelector::try_from(RemoteRef {
+            key: "app/database".to_string(),
+            property: Some("DATABASE_URL".to_string()),
+            version: None,
+        })?;
+
+        client.resolve(selector.clone()).await?;
+        client.resolve(selector).await?;
+
+        assert_eq!(counters.token_requests(), 2);
+        assert_eq!(counters.sync_requests(), 2);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn refreshes_after_cache_ttl() -> TestResult {
+        let (client, counters) =
+            fake_client_with_cache(VaultwardenCacheConfig::new(Duration::from_millis(10))).await?;
+        let selector = VaultwardenSelector::try_from(RemoteRef {
+            key: "app/database".to_string(),
+            property: Some("DATABASE_URL".to_string()),
+            version: None,
+        })?;
+
+        client.resolve(selector.clone()).await?;
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        client.resolve(selector).await?;
+
+        assert_eq!(counters.token_requests(), 2);
+        assert_eq!(counters.sync_requests(), 2);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn coalesces_concurrent_stale_resolves() -> TestResult {
+        let (client, counters) =
+            fake_client_with_cache(VaultwardenCacheConfig::new(Duration::from_secs(60))).await?;
+        let selector = VaultwardenSelector::try_from(RemoteRef {
+            key: "app/database".to_string(),
+            property: Some("DATABASE_URL".to_string()),
+            version: None,
+        })?;
+
+        let (first, second) = tokio::join!(
+            client.resolve(selector.clone()),
+            client.resolve(selector.clone())
+        );
+
+        assert_eq!(
+            first?.data.get("DATABASE_URL"),
+            Some(&"postgres://app:secret@db:5432/app".to_string())
+        );
+        assert_eq!(
+            second?.data.get("DATABASE_URL"),
+            Some(&"postgres://app:secret@db:5432/app".to_string())
+        );
+        assert_eq!(counters.token_requests(), 1);
+        assert_eq!(counters.sync_requests(), 1);
+        Ok(())
+    }
+
     async fn fake_client() -> Result<VaultwardenApiClient, Box<dyn std::error::Error>> {
-        let base_url = spawn_fake_server().await?;
+        let (client, _) = fake_client_with_cache(VaultwardenCacheConfig::default()).await?;
+        Ok(client)
+    }
+
+    async fn fake_client_with_cache(
+        cache_config: VaultwardenCacheConfig,
+    ) -> Result<(VaultwardenApiClient, FakeCounters), Box<dyn std::error::Error>> {
+        let (base_url, counters) = spawn_fake_server().await?;
         let endpoint = VaultwardenEndpoint::parse(&base_url)?;
         let auth = VaultwardenAuth {
             client_id: "user.fixture".to_string(),
@@ -601,12 +816,23 @@ mod tests {
             master_password: PASSWORD.into(),
         };
 
-        Ok(VaultwardenApiClient::new(endpoint, auth)?)
+        let client = VaultwardenApiClient::with_device_and_cache(
+            endpoint,
+            auth,
+            VaultwardenDevice::default(),
+            cache_config,
+        )?;
+
+        Ok((client, counters))
     }
 
-    async fn spawn_fake_server() -> Result<String, Box<dyn std::error::Error>> {
+    async fn spawn_fake_server() -> Result<(String, FakeCounters), Box<dyn std::error::Error>> {
         let cipher = serde_json::from_str::<serde_json::Value>(LOGIN_CIPHER_JSON)?;
-        let state = FakeState { cipher };
+        let counters = FakeCounters::default();
+        let state = FakeState {
+            cipher,
+            counters: counters.clone(),
+        };
         let app = Router::new()
             .route("/identity/accounts/prelogin/password", post(fake_prelogin))
             .route("/identity/connect/token", post(fake_token))
@@ -620,7 +846,7 @@ mod tests {
             }
         });
 
-        Ok(format!("http://{}", socket_addr(address)))
+        Ok((format!("http://{}", socket_addr(address)), counters))
     }
 
     async fn fake_prelogin(Json(request): Json<FakePreloginRequest>) -> impl IntoResponse {
@@ -641,7 +867,12 @@ mod tests {
         .into_response()
     }
 
-    async fn fake_token(Form(form): Form<FakeTokenForm>) -> impl IntoResponse {
+    async fn fake_token(
+        State(state): State<FakeState>,
+        Form(form): Form<FakeTokenForm>,
+    ) -> impl IntoResponse {
+        state.counters.token_requests.fetch_add(1, Ordering::SeqCst);
+
         let valid = form.grant_type == "client_credentials"
             && form.scope == "api"
             && form.client_id == "user.fixture"
@@ -679,6 +910,8 @@ mod tests {
     }
 
     async fn fake_sync(State(state): State<FakeState>, headers: HeaderMap) -> impl IntoResponse {
+        state.counters.sync_requests.fetch_add(1, Ordering::SeqCst);
+
         let auth = headers
             .get(header::AUTHORIZATION)
             .and_then(|value| value.to_str().ok());

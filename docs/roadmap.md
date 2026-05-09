@@ -19,7 +19,8 @@ Initial notes on authenticated encrypted string handling live in
   fixtures.
 - Add field extraction for login, secure note, SSH key, and custom fields.
 - Wire runtime configuration into `vwso-eso-webhook`.
-- Add cache with explicit TTL and redacted metrics.
+- Add cache with explicit TTL and single-flight refresh.
+- Add redacted metrics.
 - Add a local CLI smoke-test command.
 
 ## Phase 2: ESO Webhook
