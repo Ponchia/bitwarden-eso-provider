@@ -15,7 +15,8 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use vwso_core::{RemoteRef, SecretDocument};
 use vwso_vaultwarden::{
-    NotImplementedProvider, VaultwardenClientError, VaultwardenProvider, VaultwardenSelector,
+    CipherError, NotImplementedProvider, VaultwardenClientError, VaultwardenProvider,
+    VaultwardenSelector,
 };
 
 #[derive(Debug, Parser)]
@@ -101,7 +102,15 @@ async fn resolve(
 fn provider_error(error: &VaultwardenClientError) -> (StatusCode, Json<ErrorResponse>) {
     let message = error.to_string();
     let status = match error {
-        VaultwardenClientError::Validation(_) => StatusCode::BAD_REQUEST,
+        VaultwardenClientError::Validation(_)
+        | VaultwardenClientError::Cipher(CipherError::BlankProperty) => StatusCode::BAD_REQUEST,
+        VaultwardenClientError::Cipher(CipherError::MissingProperty { .. }) => {
+            StatusCode::NOT_FOUND
+        }
+        VaultwardenClientError::Crypto(_)
+        | VaultwardenClientError::Cipher(CipherError::Crypto(_)) => {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
         VaultwardenClientError::NotImplemented { .. } => StatusCode::NOT_IMPLEMENTED,
         VaultwardenClientError::InvalidEndpoint { .. }
         | VaultwardenClientError::InsecureEndpoint => StatusCode::INTERNAL_SERVER_ERROR,

@@ -6,11 +6,20 @@
 //! exposes a narrow trait so adapters can be built and tested before the
 //! Vaultwarden implementation is filled in.
 
+pub mod cipher;
+pub mod crypto;
+
 use async_trait::async_trait;
 use secrecy::SecretString;
 use thiserror::Error;
 use url::Url;
 use vwso_core::{require_non_empty, RemoteRef, SecretDocument, ValidationError};
+
+pub use cipher::{
+    CipherError, DecryptedCipher, DecryptedField, DecryptedLogin, DecryptedSshKey, EncryptedCipher,
+    EncryptedField, EncryptedLogin, EncryptedSshKey,
+};
+pub use crypto::{AuthenticatedSymmetricKey, CryptoError, EncryptedString, EncryptionType};
 
 /// Vaultwarden endpoint configuration.
 #[derive(Debug, Clone)]
@@ -116,6 +125,12 @@ pub enum VaultwardenClientError {
     /// Shared validation failure.
     #[error(transparent)]
     Validation(#[from] ValidationError),
+    /// Symmetric crypto failure.
+    #[error(transparent)]
+    Crypto(#[from] CryptoError),
+    /// Cipher model or field extraction failure.
+    #[error(transparent)]
+    Cipher(#[from] CipherError),
     /// URL parsing failed.
     #[error("invalid Vaultwarden endpoint")]
     InvalidEndpoint {

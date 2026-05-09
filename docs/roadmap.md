@@ -8,6 +8,9 @@
 - Validate ESO webhook request and response contracts.
 - Decide field addressing syntax.
 
+Initial notes on authenticated encrypted string handling live in
+[`crypto-notes.md`](crypto-notes.md).
+
 ## Phase 1: Local Provider
 
 - Implement Vaultwarden login with user API key.
@@ -29,4 +32,3 @@
 - Document rollout/restart options with Reloader and GitOps annotations.
 - Add examples for TLS, docker config, basic auth, and multiline files.
 - Decide whether a native controller or native ESO provider is needed.
-

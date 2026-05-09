@@ -28,12 +28,17 @@ panic = "deny"
 [workspace.dependencies]
 anyhow = "1.0"
 async-trait = "0.1"
+aes = "0.8"
 axum = { version = "0.7", features = ["macros"] }
+base64 = "0.22"
+cbc = { version = "0.1", features = ["block-padding"] }
 clap = { version = "4.5", features = ["derive", "env"] }
+hmac = "0.12"
 http = "1.1"
 secrecy = "0.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sha2 = "0.10"
 thiserror = "2.0"
 tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "signal", "net"] }
 tower = { version = "0.5", features = ["util"] }
@@ -41,3 +46,4 @@ tower-http = { version = "0.6", features = ["trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 url = "2.5"
+zeroize = "1.8"

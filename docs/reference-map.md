@@ -11,6 +11,7 @@ Local reference checkouts live outside this repository:
 | Directory | Upstream | Purpose |
 | --- | --- | --- |
 | `vaultwarden` | `https://github.com/dani-garcia/vaultwarden` | Vaultwarden API compatibility, server behavior, Rust style |
+| `bitwarden-clients` | `https://github.com/bitwarden/clients` | Password Manager client-side cipher, key, and field model behavior |
 | `bitwarden-sdk` | `https://github.com/bitwarden/sdk` | Bitwarden Rust SDK structure and crypto references |
 | `external-secrets` | `https://github.com/external-secrets/external-secrets` | ESO webhook provider contract and controller semantics |
 | `onepassword-operator` | `https://github.com/1Password/onepassword-operator` | Mature password-manager Kubernetes operator UX |
