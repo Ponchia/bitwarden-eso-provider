@@ -22,3 +22,7 @@ tracing-subscriber.workspace = true
 vwso-core = { path = "../vwso-core" }
 vwso-vaultwarden = { path = "../vwso-vaultwarden" }
 
+[dev-dependencies]
+async-trait.workspace = true
+serde_json.workspace = true
+tower.workspace = true
