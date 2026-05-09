@@ -502,12 +502,17 @@ struct MasterPasswordUnlockResponse {
     #[serde(rename = "kdf", alias = "Kdf")]
     kdf: TokenKdfResponse,
     #[serde(
+        default,
         rename = "masterKeyWrappedUserKey",
-        alias = "MasterKeyWrappedUserKey",
-        alias = "MasterKeyEncryptedUserKey",
-        alias = "masterKeyEncryptedUserKey"
+        alias = "MasterKeyWrappedUserKey"
     )]
-    master_key_wrapped_user_key: String,
+    master_key_wrapped_user_key: Option<String>,
+    #[serde(
+        default,
+        rename = "masterKeyEncryptedUserKey",
+        alias = "MasterKeyEncryptedUserKey"
+    )]
+    master_key_encrypted_user_key: Option<String>,
     #[serde(rename = "salt", alias = "Salt")]
     salt: String,
 }
@@ -516,10 +521,15 @@ impl TryFrom<MasterPasswordUnlockResponse> for MasterPasswordUnlockData {
     type Error = VaultwardenApiError;
 
     fn try_from(response: MasterPasswordUnlockResponse) -> Result<Self, Self::Error> {
+        let master_key_wrapped_user_key = response
+            .master_key_wrapped_user_key
+            .or(response.master_key_encrypted_user_key)
+            .ok_or(VaultwardenApiError::MissingMasterKeyWrappedUserKey)?;
+
         Ok(Self {
             salt: response.salt,
             kdf: response.kdf.try_into()?,
-            master_key_wrapped_user_key: response.master_key_wrapped_user_key,
+            master_key_wrapped_user_key,
         })
     }
 }
@@ -630,6 +640,9 @@ pub enum VaultwardenApiError {
     /// API-key login did not return master-password unlock data.
     #[error("Bitwarden-compatible token response did not include master-password unlock data")]
     MissingMasterPasswordUnlock,
+    /// API-key login did not return the wrapped user key needed for local unlock.
+    #[error("Bitwarden-compatible token response did not include a master-key-wrapped user key")]
+    MissingMasterKeyWrappedUserKey,
     /// Cache refresh did not produce a sync response.
     #[error("Bitwarden-compatible sync cache is empty after refresh")]
     MissingCachedSync,
@@ -1100,6 +1113,7 @@ mod tests {
                         "Parallelism": null
                     },
                     "MasterKeyWrappedUserKey": WRAPPED_CIPHER_TEST_KEY,
+                    "MasterKeyEncryptedUserKey": WRAPPED_CIPHER_TEST_KEY,
                     "Salt": " User@Example.COM "
                 }
             }

@@ -204,6 +204,7 @@ fn provider_error(error: &VaultwardenClientError) -> (StatusCode, Json<ErrorResp
             | VaultwardenApiError::UnsupportedKdfType { .. }
             | VaultwardenApiError::MissingKdfParameter { .. }
             | VaultwardenApiError::MissingMasterPasswordUnlock
+            | VaultwardenApiError::MissingMasterKeyWrappedUserKey
             | VaultwardenApiError::MissingCachedSync,
         )
         | VaultwardenClientError::InvalidEndpoint { .. }
