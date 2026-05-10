@@ -62,8 +62,8 @@ Live verification status:
 
 - Vaultwarden single-origin: verified against a real k3s cluster with External
   Secrets Operator on 2026-05-09.
-- Bitwarden Cloud split endpoints: fake-server covered, still pending a live
-  validation account.
+- Bitwarden Cloud US split endpoints: verified against a dedicated live account
+  and a real k3s cluster with External Secrets Operator on 2026-05-10.
 
 ## Current Scope
 

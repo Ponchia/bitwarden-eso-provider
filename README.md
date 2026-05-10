@@ -40,9 +40,8 @@ The current repository contains:
 - CI scaffolding for formatting, clippy, unit tests, fake-server tests, and an
   opt-in live Bitwarden-compatible smoke test.
 
-Bitwarden Cloud split endpoints are covered by fake-server tests, but still need
-a live Bitwarden Cloud validation account before this project should claim full
-cloud compatibility.
+Bitwarden Cloud split endpoints are covered by fake-server tests and have been
+live-tested against a dedicated Bitwarden Cloud account.
 
 ## Design Principles
 

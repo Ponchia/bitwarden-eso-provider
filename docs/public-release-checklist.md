@@ -5,8 +5,6 @@ Required before calling a release generally usable:
 - Tag and publish a multi-arch image from GitHub Actions.
 - Run `scripts/live-eso-smoke.sh` against a real Vaultwarden instance and k3s or
   kind cluster with ESO installed.
-- Run the live smoke test against Bitwarden Cloud US or EU with a dedicated
-  validation account.
 - Publish the Helm chart artifact or document chart install from source for the
   first pre-release.
 - Review the release image SBOM/provenance output.
