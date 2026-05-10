@@ -18,4 +18,4 @@
 /coverage/
 /tarpaulin-report.html
 /junit.xml
-
+/.playwright-cli/

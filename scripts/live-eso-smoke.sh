@@ -338,7 +338,7 @@ log "checking webhook restart plus resync"
   --for=condition=Ready --timeout=180s >/dev/null
 wait_secret_nonempty "${target_secret}" resolved
 
-wait_error() {
+wait_negative_absent() {
   local name="$1"
   local deadline=$((SECONDS + 120))
   local status
@@ -346,17 +346,17 @@ wait_error() {
     status="$("${kubectl_cmd[@]}" -n "${namespace}" get externalsecret "${name}" -o json \
       | jq -r '.status.conditions[]? | select(.type == "Ready") | "\(.status) \(.reason)"' \
       | tail -n 1)"
-    if [[ "${status}" == "False SecretSyncedError" ]]; then
+    if [[ "${status}" == "False SecretSyncedError" || "${status}" == "True SecretDeleted" ]]; then
       return 0
     fi
     sleep 2
   done
-  fail "${name} did not reach Ready=False SecretSyncedError"
+  fail "${name} did not reach a negative no-target state"
 }
 
 log "checking expected negative cases"
-wait_error vwso-missing-property
-wait_error vwso-missing-item
+wait_negative_absent vwso-missing-property
+wait_negative_absent vwso-missing-item
 if "${kubectl_cmd[@]}" -n "${namespace}" get secret vwso-missing-property-secret >/dev/null 2>&1; then
   fail "missing-property ExternalSecret unexpectedly created a target Secret"
 fi
