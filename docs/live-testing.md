@@ -59,7 +59,7 @@ item ID and property name for follow-up Kubernetes tests. The file does not
 contain decrypted values.
 
 Use a dedicated Vaultwarden or Bitwarden user with only the fixture items needed
-by this project. Do not run live tests against a personal daily-use account.
+by this project. Do not run live tests against a primary day-to-day account.
 
 ## Live ESO Smoke Test
 

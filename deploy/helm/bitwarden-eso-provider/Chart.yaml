@@ -8,7 +8,7 @@ home: https://github.com/ponchia/bitwarden-eso-provider
 sources:
   - https://github.com/ponchia/bitwarden-eso-provider
 maintainers:
-  - name: Zeno Rocha
+  - name: Ponchia
     url: https://github.com/ponchia
 keywords:
   - vaultwarden

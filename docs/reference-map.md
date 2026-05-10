@@ -1,7 +1,7 @@
 # Reference Map
 
-Local reference checkouts live outside this repository. In the original local
-workspace they were stored at:
+Local reference checkouts live outside this repository. The recommended local
+checkout location is:
 
 ```text
 ../_docs/reference-map.mdbitwarden-eso-provider

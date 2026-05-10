@@ -3,19 +3,17 @@
 This document captures the repository settings expected before the project is
 made public.
 
-## Current Publication Gate
+## Publication Gate
 
-The repository is still private. On the current GitHub plan, branch protection
-for this private repository is not available; GitHub returns a plan-gating error
-when reading or writing `main` protection. Enable the protection rules below
-immediately after making the repository public, or upgrade the private
-repository plan before publication.
+Before publication, verify that the repository settings below are either already
+enabled or scheduled for the visibility change. Some GitHub security and branch
+protection controls are plan-dependent for private repositories; enable them
+immediately when they become available.
 
 Dependabot vulnerability alerts, issue tracking, squash-only merging, branch
-cleanup after merge, and repository topics are already enabled. GitHub currently
-rejects secret scanning, push protection, and private vulnerability reporting for
-this private repository, so enable them after the repository becomes public if
-they are available in the repository security settings.
+cleanup after merge, and repository topics should be enabled before publication.
+Enable secret scanning, push protection, and private vulnerability reporting as
+soon as GitHub exposes those controls for the repository.
 
 Do not make the repository public until the working tree is clean, all CI checks
 pass, and the ignored local `.env.*` files have been removed or kept outside the
@@ -23,8 +21,7 @@ repository directory.
 
 ## Recommended Repository Settings
 
-- Visibility: private until the first public-ready commit has passed CI, then
-  public.
+- Visibility: public after the first public-ready commit has passed CI.
 - Issues: enabled.
 - Discussions: optional; enable only if issue traffic becomes noisy.
 - Wiki: disabled. Keep docs in Git.
