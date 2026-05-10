@@ -1,11 +1,13 @@
 # syntax=docker/dockerfile:1.7
 
-FROM rust:1.86-slim-bookworm AS builder
+FROM rust:1.86-alpine AS builder
 
 WORKDIR /workspace
 
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
+
+RUN apk add --no-cache musl-dev
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
@@ -13,18 +15,13 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --locked --release -p bitwarden-eso-provider \
     && cp /workspace/target/release/bitwarden-eso-provider /usr/local/bin/bitwarden-eso-provider
 
-FROM debian:bookworm-slim AS runtime
-
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --uid 65532 --home-dir /nonexistent --shell /usr/sbin/nologin bweso
+FROM scratch AS runtime
 
 COPY --from=builder /usr/local/bin/bitwarden-eso-provider /usr/local/bin/bitwarden-eso-provider
 
 USER 65532:65532
 EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD ["/usr/local/bin/bitwarden-eso-provider", "--healthcheck-url", "http://127.0.0.1:8080/livez"]
 
 ENTRYPOINT ["/usr/local/bin/bitwarden-eso-provider"]

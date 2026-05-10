@@ -5,6 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
+description = "Shared External Secrets Operator webhook types for Bitwarden ESO Provider"
+repository.workspace = true
+homepage.workspace = true
+publish = false
 
 [lints]
 workspace = true
@@ -12,4 +16,3 @@ workspace = true
 [dependencies]
 serde.workspace = true
 thiserror.workspace = true
-

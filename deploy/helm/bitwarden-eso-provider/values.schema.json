@@ -20,6 +20,16 @@
           "pattern": "^[0-9]+$",
           "minimum": 0
         },
+        "httpConnectTimeoutSeconds": {
+          "type": ["integer", "string"],
+          "pattern": "^[1-9][0-9]*$",
+          "minimum": 1
+        },
+        "httpRequestTimeoutSeconds": {
+          "type": ["integer", "string"],
+          "pattern": "^[1-9][0-9]*$",
+          "minimum": 1
+        },
         "deviceIdentifier": {
           "type": "string"
         },
@@ -57,6 +67,9 @@
                 },
                 "masterPassword": {
                   "type": "string"
+                },
+                "webhookToken": {
+                  "type": "string"
                 }
               }
             }
@@ -73,6 +86,21 @@
         },
         "masterPassword": {
           "type": "string"
+        },
+        "webhookToken": {
+          "type": "string"
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "insecureAllowUnauthenticated": {
+          "type": "boolean"
         }
       }
     },

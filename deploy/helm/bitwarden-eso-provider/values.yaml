@@ -2,8 +2,9 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/ponchia/bitwarden-eso-provider
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
   tag: ""
+  digest: ""
 
 imagePullSecrets: []
 nameOverride: ""
@@ -25,6 +26,8 @@ podSecurityContext:
   runAsUser: 65532
   runAsGroup: 65532
   fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
 
 securityContext:
   allowPrivilegeEscalation: false
@@ -47,25 +50,33 @@ config:
   identityUrl: ""
   apiUrl: ""
   cacheTtlSeconds: 60
+  httpConnectTimeoutSeconds: 5
+  httpRequestTimeoutSeconds: 25
   deviceIdentifier: bitwarden-eso-provider
   deviceName: Bitwarden ESO Provider
   deviceType: 22
 
+auth:
+  enabled: true
+  insecureAllowUnauthenticated: false
+
 credentials:
   # Prefer an existing Secret. Required keys default to:
-  # client-id, client-secret, master-password.
+  # client-id, client-secret, master-password, webhook-token.
   existingSecret:
     name: ""
     keys:
       clientId: client-id
       clientSecret: client-secret
       masterPassword: master-password
+      webhookToken: webhook-token
   # create is useful for local smoke tests, but avoid committing secret values
   # in Helm values files.
   create: false
   clientId: ""
   clientSecret: ""
   masterPassword: ""
+  webhookToken: ""
 
 logging:
   rustLog: info,tower_http=info
@@ -111,7 +122,15 @@ metrics:
 
 extraEnv: []
 
-resources: {}
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+    ephemeral-storage: 16Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi
+    ephemeral-storage: 64Mi
 
 nodeSelector: {}
 tolerations: []
@@ -119,7 +138,20 @@ affinity: {}
 topologySpreadConstraints: []
 
 networkPolicy:
-  enabled: false
+  enabled: true
   annotations: {}
-  ingress: []
-  egress: []
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80

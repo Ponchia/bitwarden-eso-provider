@@ -49,74 +49,65 @@ impl KdfConfig {
     /// Bitwarden prelogin minimums or above current Bitwarden setting maximums.
     pub fn validate_for_prelogin(&self) -> Result<(), KeyDerivationError> {
         match *self {
-            Self::Pbkdf2Sha256 { iterations } => {
-                if iterations < PBKDF2_PRELOGIN_ITERATIONS_MIN {
-                    return Err(KeyDerivationError::KdfDowngrade {
-                        parameter: "pbkdf2_iterations",
-                        actual: iterations,
-                        minimum: PBKDF2_PRELOGIN_ITERATIONS_MIN,
-                    });
-                }
-                if iterations > PBKDF2_PRELOGIN_ITERATIONS_MAX {
-                    return Err(KeyDerivationError::KdfTooExpensive {
-                        parameter: "pbkdf2_iterations",
-                        actual: iterations,
-                        maximum: PBKDF2_PRELOGIN_ITERATIONS_MAX,
-                    });
-                }
-            }
+            Self::Pbkdf2Sha256 { iterations } => validate_kdf_bounds(
+                "pbkdf2_iterations",
+                iterations,
+                PBKDF2_PRELOGIN_ITERATIONS_MIN,
+                PBKDF2_PRELOGIN_ITERATIONS_MAX,
+            )?,
             Self::Argon2id {
                 iterations,
                 memory_mib,
                 parallelism,
             } => {
-                if iterations < ARGON2_PRELOGIN_ITERATIONS_MIN {
-                    return Err(KeyDerivationError::KdfDowngrade {
-                        parameter: "argon2_iterations",
-                        actual: iterations,
-                        minimum: ARGON2_PRELOGIN_ITERATIONS_MIN,
-                    });
-                }
-                if iterations > ARGON2_PRELOGIN_ITERATIONS_MAX {
-                    return Err(KeyDerivationError::KdfTooExpensive {
-                        parameter: "argon2_iterations",
-                        actual: iterations,
-                        maximum: ARGON2_PRELOGIN_ITERATIONS_MAX,
-                    });
-                }
-                if memory_mib < ARGON2_PRELOGIN_MEMORY_MIB_MIN {
-                    return Err(KeyDerivationError::KdfDowngrade {
-                        parameter: "argon2_memory_mib",
-                        actual: memory_mib,
-                        minimum: ARGON2_PRELOGIN_MEMORY_MIB_MIN,
-                    });
-                }
-                if memory_mib > ARGON2_PRELOGIN_MEMORY_MIB_MAX {
-                    return Err(KeyDerivationError::KdfTooExpensive {
-                        parameter: "argon2_memory_mib",
-                        actual: memory_mib,
-                        maximum: ARGON2_PRELOGIN_MEMORY_MIB_MAX,
-                    });
-                }
-                if parallelism < ARGON2_PRELOGIN_PARALLELISM_MIN {
-                    return Err(KeyDerivationError::KdfDowngrade {
-                        parameter: "argon2_parallelism",
-                        actual: parallelism,
-                        minimum: ARGON2_PRELOGIN_PARALLELISM_MIN,
-                    });
-                }
-                if parallelism > ARGON2_PRELOGIN_PARALLELISM_MAX {
-                    return Err(KeyDerivationError::KdfTooExpensive {
-                        parameter: "argon2_parallelism",
-                        actual: parallelism,
-                        maximum: ARGON2_PRELOGIN_PARALLELISM_MAX,
-                    });
-                }
+                validate_kdf_bounds(
+                    "argon2_iterations",
+                    iterations,
+                    ARGON2_PRELOGIN_ITERATIONS_MIN,
+                    ARGON2_PRELOGIN_ITERATIONS_MAX,
+                )?;
+                validate_kdf_bounds(
+                    "argon2_memory_mib",
+                    memory_mib,
+                    ARGON2_PRELOGIN_MEMORY_MIB_MIN,
+                    ARGON2_PRELOGIN_MEMORY_MIB_MAX,
+                )?;
+                validate_kdf_bounds(
+                    "argon2_parallelism",
+                    parallelism,
+                    ARGON2_PRELOGIN_PARALLELISM_MIN,
+                    ARGON2_PRELOGIN_PARALLELISM_MAX,
+                )?;
             }
         }
 
         Ok(())
     }
+}
+
+fn validate_kdf_bounds(
+    parameter: &'static str,
+    actual: u32,
+    minimum: u32,
+    maximum: u32,
+) -> Result<(), KeyDerivationError> {
+    if actual < minimum {
+        return Err(KeyDerivationError::KdfDowngrade {
+            parameter,
+            actual,
+            minimum,
+        });
+    }
+
+    if actual > maximum {
+        return Err(KeyDerivationError::KdfTooExpensive {
+            parameter,
+            actual,
+            maximum,
+        });
+    }
+
+    Ok(())
 }
 
 /// 32-byte master key material derived from the master password.
@@ -478,13 +469,10 @@ mod tests {
 
     #[test]
     fn rejects_pbkdf2_resource_excess() {
-        let error = derive_master_key(
-            PASSWORD,
-            SALT,
-            &KdfConfig::Pbkdf2Sha256 {
-                iterations: 2_000_001,
-            },
-        )
+        let error = KdfConfig::Pbkdf2Sha256 {
+            iterations: 2_000_001,
+        }
+        .validate_for_prelogin()
         .err();
 
         assert!(matches!(
@@ -498,15 +486,12 @@ mod tests {
 
     #[test]
     fn rejects_argon2_prelogin_downgrade() {
-        let error = derive_master_key(
-            PASSWORD,
-            SALT,
-            &KdfConfig::Argon2id {
-                iterations: 2,
-                memory_mib: 15,
-                parallelism: 1,
-            },
-        )
+        let error = KdfConfig::Argon2id {
+            iterations: 2,
+            memory_mib: 15,
+            parallelism: 1,
+        }
+        .validate_for_prelogin()
         .err();
 
         assert!(matches!(
@@ -520,15 +505,12 @@ mod tests {
 
     #[test]
     fn rejects_argon2_resource_excess() {
-        let error = derive_master_key(
-            PASSWORD,
-            SALT,
-            &KdfConfig::Argon2id {
-                iterations: 2,
-                memory_mib: 1025,
-                parallelism: 1,
-            },
-        )
+        let error = KdfConfig::Argon2id {
+            iterations: 2,
+            memory_mib: 1025,
+            parallelism: 1,
+        }
+        .validate_for_prelogin()
         .err();
 
         assert!(matches!(
@@ -538,5 +520,55 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn accepts_prelogin_boundary_values() -> Result<(), Box<dyn std::error::Error>> {
+        KdfConfig::Pbkdf2Sha256 {
+            iterations: PBKDF2_PRELOGIN_ITERATIONS_MIN,
+        }
+        .validate_for_prelogin()?;
+        KdfConfig::Pbkdf2Sha256 {
+            iterations: PBKDF2_PRELOGIN_ITERATIONS_MAX,
+        }
+        .validate_for_prelogin()?;
+        KdfConfig::Argon2id {
+            iterations: ARGON2_PRELOGIN_ITERATIONS_MIN,
+            memory_mib: ARGON2_PRELOGIN_MEMORY_MIB_MIN,
+            parallelism: ARGON2_PRELOGIN_PARALLELISM_MIN,
+        }
+        .validate_for_prelogin()?;
+        KdfConfig::Argon2id {
+            iterations: ARGON2_PRELOGIN_ITERATIONS_MAX,
+            memory_mib: ARGON2_PRELOGIN_MEMORY_MIB_MAX,
+            parallelism: ARGON2_PRELOGIN_PARALLELISM_MAX,
+        }
+        .validate_for_prelogin()?;
+        Ok(())
+    }
+
+    #[test]
+    fn validates_master_key_length_boundaries() {
+        let Err(short) = MasterKey::try_from([0_u8; MASTER_KEY_LENGTH - 1].as_slice()) else {
+            unreachable!("short master key should fail");
+        };
+        assert!(matches!(
+            short,
+            KeyDerivationError::InvalidMasterKeyLength { actual }
+            if actual == MASTER_KEY_LENGTH - 1
+        ));
+
+        let Err(long) = MasterKey::try_from([0_u8; MASTER_KEY_LENGTH + 1].as_slice()) else {
+            unreachable!("long master key should fail");
+        };
+        assert!(matches!(
+            long,
+            KeyDerivationError::InvalidMasterKeyLength { actual }
+            if actual == MASTER_KEY_LENGTH + 1
+        ));
+
+        let Ok(_) = MasterKey::try_from([0_u8; MASTER_KEY_LENGTH].as_slice()) else {
+            unreachable!("exact master key length should be accepted");
+        };
     }
 }

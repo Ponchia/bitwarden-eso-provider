@@ -58,6 +58,17 @@ Service account name.
 {{- end -}}
 
 {{/*
+Container image reference.
+*/}}
+{{- define "bweso.image" -}}
+{{- if .Values.image.digest -}}
+{{- printf "%s@%s" .Values.image.repository .Values.image.digest -}}
+{{- else -}}
+{{- printf "%s:%s" .Values.image.repository (default .Chart.AppVersion .Values.image.tag) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Credentials Secret name.
 */}}
 {{- define "bweso.credentialsSecretName" -}}
@@ -84,6 +95,12 @@ Validate endpoint and credential configuration.
 {{- if and (not .Values.credentials.create) (not .Values.credentials.existingSecret.name) -}}
 {{- fail "configure credentials.existingSecret.name or set credentials.create=true" -}}
 {{- end -}}
+{{- if and (not .Values.auth.enabled) (not .Values.auth.insecureAllowUnauthenticated) -}}
+{{- fail "auth.enabled=false requires auth.insecureAllowUnauthenticated=true" -}}
+{{- end -}}
+{{- if and .Values.auth.enabled .Values.auth.insecureAllowUnauthenticated -}}
+{{- fail "configure either auth.enabled=true or auth.insecureAllowUnauthenticated=true, not both" -}}
+{{- end -}}
 {{- if .Values.credentials.create -}}
 {{- if not .Values.credentials.clientId -}}
 {{- fail "credentials.clientId is required when credentials.create=true" -}}
@@ -93,6 +110,9 @@ Validate endpoint and credential configuration.
 {{- end -}}
 {{- if not .Values.credentials.masterPassword -}}
 {{- fail "credentials.masterPassword is required when credentials.create=true" -}}
+{{- end -}}
+{{- if and .Values.auth.enabled (not .Values.credentials.webhookToken) -}}
+{{- fail "credentials.webhookToken is required when credentials.create=true and auth.enabled=true" -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

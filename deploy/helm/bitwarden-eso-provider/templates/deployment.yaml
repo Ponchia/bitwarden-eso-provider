@@ -37,7 +37,7 @@ spec:
         - name: bitwarden-eso-provider
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+          image: {{ include "bweso.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
@@ -56,23 +56,25 @@ spec:
             - name: BWESO_API_URL
               value: {{ .Values.config.apiUrl | quote }}
             {{- end }}
-            - name: BWESO_CLIENT_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "bweso.credentialsSecretName" . }}
-                  key: {{ .Values.credentials.existingSecret.keys.clientId | quote }}
-            - name: BWESO_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "bweso.credentialsSecretName" . }}
-                  key: {{ .Values.credentials.existingSecret.keys.clientSecret | quote }}
-            - name: BWESO_MASTER_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "bweso.credentialsSecretName" . }}
-                  key: {{ .Values.credentials.existingSecret.keys.masterPassword | quote }}
+            - name: BWESO_CLIENT_ID_FILE
+              value: /var/run/secrets/bweso/{{ .Values.credentials.existingSecret.keys.clientId }}
+            - name: BWESO_CLIENT_SECRET_FILE
+              value: /var/run/secrets/bweso/{{ .Values.credentials.existingSecret.keys.clientSecret }}
+            - name: BWESO_MASTER_PASSWORD_FILE
+              value: /var/run/secrets/bweso/{{ .Values.credentials.existingSecret.keys.masterPassword }}
+            {{- if .Values.auth.enabled }}
+            - name: BWESO_WEBHOOK_AUTH_TOKEN_FILE
+              value: /var/run/secrets/bweso/{{ .Values.credentials.existingSecret.keys.webhookToken }}
+            {{- else if .Values.auth.insecureAllowUnauthenticated }}
+            - name: BWESO_INSECURE_ALLOW_UNAUTHENTICATED
+              value: "true"
+            {{- end }}
             - name: BWESO_CACHE_TTL_SECONDS
               value: {{ .Values.config.cacheTtlSeconds | quote }}
+            - name: BWESO_HTTP_CONNECT_TIMEOUT_SECONDS
+              value: {{ .Values.config.httpConnectTimeoutSeconds | quote }}
+            - name: BWESO_HTTP_REQUEST_TIMEOUT_SECONDS
+              value: {{ .Values.config.httpRequestTimeoutSeconds | quote }}
             - name: BWESO_DEVICE_IDENTIFIER
               value: {{ .Values.config.deviceIdentifier | quote }}
             - name: BWESO_DEVICE_NAME
@@ -98,6 +100,15 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: credentials
+              mountPath: /var/run/secrets/bweso
+              readOnly: true
+      volumes:
+        - name: credentials
+          secret:
+            secretName: {{ include "bweso.credentialsSecretName" . }}
+            defaultMode: 0400
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -18,8 +18,8 @@ use thiserror::Error;
 use url::Url;
 
 pub use api::{
-    BitwardenApiClient, BitwardenApiError, BitwardenCacheConfig, BitwardenDevice, BitwardenSession,
-    SyncResponse,
+    BitwardenApiClient, BitwardenApiError, BitwardenCacheConfig, BitwardenDevice,
+    BitwardenHttpConfig, BitwardenSession, SyncResponse,
 };
 pub use cipher::{
     CipherError, DecryptedCipher, DecryptedField, DecryptedLogin, DecryptedSshKey, EncryptedCipher,

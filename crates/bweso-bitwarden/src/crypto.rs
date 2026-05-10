@@ -326,8 +326,8 @@ mod tests {
     #[test]
     fn rejects_tampered_mac() -> Result<(), Box<dyn std::error::Error>> {
         let key = AuthenticatedSymmetricKey::from_base64(KEY_B64)?;
-        let encrypted = "2.QEFCQ0RFRkdISUpLTE1OTw==|SgvILpma5dxrOQiNaAGR699WX5rwBVaPsidtZD2BxAKBaMLSm4jnP2eD70tV04Nh|AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-            .parse::<EncryptedString>()?;
+        let mut encrypted = DATABASE_URL.parse::<EncryptedString>()?;
+        encrypted.mac = vec![0; HMAC_SHA256_LENGTH];
 
         let Err(error) = encrypted.decrypt_utf8(&key) else {
             unreachable!("tampered MAC should fail");
@@ -344,6 +344,38 @@ mod tests {
         };
 
         assert!(matches!(error, CryptoError::LegacyNoMacDisabled));
+    }
+
+    #[test]
+    fn rejects_empty_or_unaligned_ciphertext() {
+        let Err(empty) = "2.AAECAwQFBgcICQoLDA0ODw==||AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+            .parse::<EncryptedString>()
+        else {
+            unreachable!("empty ciphertext should fail");
+        };
+        assert!(matches!(
+            empty,
+            CryptoError::InvalidCiphertextLength { actual: 0 }
+        ));
+
+        let Err(unaligned) =
+            "2.AAECAwQFBgcICQoLDA0ODw==|AAE=|AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+                .parse::<EncryptedString>()
+        else {
+            unreachable!("unaligned ciphertext should fail");
+        };
+        assert!(matches!(
+            unaligned,
+            CryptoError::InvalidCiphertextLength { actual: 2 }
+        ));
+    }
+
+    #[test]
+    fn reports_supported_encryption_type_number() -> Result<(), Box<dyn std::error::Error>> {
+        let encrypted = DATABASE_URL.parse::<EncryptedString>()?;
+
+        assert_eq!(encrypted.encryption_type().as_u8(), 2);
+        Ok(())
     }
 
     #[test]

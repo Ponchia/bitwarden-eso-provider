@@ -1,0 +1,36 @@
+name: Support question
+description: Ask a usage or integration question without exposing secrets.
+title: "[Question]: "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Public issues are not appropriate for credentials or sensitive manifests. Redact Bitwarden/Vaultwarden item names, item IDs, tokens, passwords, Kubernetes Secret values, and hostnames if they are private.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Installation
+        - Bitwarden Cloud compatibility
+        - Vaultwarden compatibility
+        - External Secrets Operator
+        - Helm chart
+        - Observability
+        - Restarts and rollouts
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Redacted context
+      description: Add versions, chart values, and manifests when useful. Keep secrets out.

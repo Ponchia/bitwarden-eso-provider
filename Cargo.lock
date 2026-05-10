@@ -204,6 +204,7 @@ dependencies = [
  "bweso-core",
  "clap",
  "http",
+ "secrecy",
  "serde",
  "serde_json",
  "tokio",
@@ -211,6 +212,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]

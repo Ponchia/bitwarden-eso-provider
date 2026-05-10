@@ -1,12 +1,34 @@
 # Security Policy
 
-This project is not production-ready yet.
+This project handles secret synchronization paths. Treat security issues as
+private until maintainers have confirmed impact and prepared a fix.
 
-## Reporting
+## Supported Versions
 
-While the repository is private, report issues directly to the maintainer. Before
-public release, replace this section with a public vulnerability disclosure
-process and security contact.
+Pre-1.0 releases are supported on a best-effort basis. The public compatibility
+contract is intentionally conservative until the first stable release.
+
+## Reporting Vulnerabilities
+
+Use GitHub Security Advisories for vulnerabilities:
+
+https://github.com/Ponchia/bitwarden-eso-provider/security/advisories/new
+
+Do not open a public issue for vulnerabilities, credential exposure, auth
+bypass, redaction failures, decrypted secret disclosure, path traversal,
+server-side request forgery, unsafe TLS behavior, or Kubernetes privilege
+escalation.
+
+When reporting, include enough redacted detail to reproduce the issue:
+
+- Provider version or image digest.
+- Backend type: Bitwarden Cloud, Vaultwarden, or self-hosted Bitwarden.
+- External Secrets Operator and Kubernetes versions.
+- Minimal redacted `SecretStore` and `ExternalSecret` manifests.
+- Redacted logs, metrics, or HTTP responses.
+
+Never include real credentials, master passwords, API tokens, vault item IDs,
+vault item names, Kubernetes Secret values, kubeconfigs, or private hostnames.
 
 ## Security Invariants
 
@@ -22,3 +44,9 @@ process and security contact.
 ## Threat Model
 
 The initial threat model lives in [docs/threat-model.md](docs/threat-model.md).
+
+## Maintainer Response
+
+Maintainers should acknowledge private reports, reproduce the issue, prepare a
+fix and release when needed, then publish a public advisory once users have a
+reasonable upgrade path.

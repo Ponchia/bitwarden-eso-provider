@@ -1,0 +1,7 @@
+exclude_re = [
+  "replace main ",
+  "replace init_tracing ",
+  "replace shutdown_signal ",
+  "AuthenticatedSymmetricKey>::drop",
+  "MasterKey>::drop",
+]

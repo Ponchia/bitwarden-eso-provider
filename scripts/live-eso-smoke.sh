@@ -58,6 +58,7 @@ require_cmd helm
 require_cmd jq
 require_cmd cargo
 require_cmd curl
+require_cmd openssl
 
 namespace="$(first_env BWESO_E2E_NAMESPACE || true)"
 namespace="${namespace:-bweso-live-smoke}"
@@ -199,14 +200,19 @@ fi
 printf '%s' "${client_id}" >"${tmp_dir}/client-id"
 printf '%s' "${client_secret}" >"${tmp_dir}/client-secret"
 printf '%s' "${master_password}" >"${tmp_dir}/master-password"
-chmod 0600 "${tmp_dir}/client-id" "${tmp_dir}/client-secret" "${tmp_dir}/master-password"
+webhook_token="$(openssl rand -base64 48 | tr -d '\n')"
+printf '%s' "${webhook_token}" >"${tmp_dir}/webhook-token"
+chmod 0600 "${tmp_dir}/client-id" "${tmp_dir}/client-secret" "${tmp_dir}/master-password" "${tmp_dir}/webhook-token"
 
 log "creating webhook credential Secret"
 "${kubectl_cmd[@]}" -n "${namespace}" create secret generic "${credentials_secret}" \
   --from-file=client-id="${tmp_dir}/client-id" \
   --from-file=client-secret="${tmp_dir}/client-secret" \
   --from-file=master-password="${tmp_dir}/master-password" \
+  --from-file=webhook-token="${tmp_dir}/webhook-token" \
   --dry-run=client -o yaml | "${kubectl_cmd[@]}" apply -f - >/dev/null
+"${kubectl_cmd[@]}" -n "${namespace}" label secret "${credentials_secret}" \
+  external-secrets.io/type=webhook --overwrite >/dev/null
 
 helm_args=(
   upgrade --install "${release}" "${CHART_DIR}"
@@ -288,6 +294,7 @@ record_direct_metric_observations() {
     '{remoteRef: {key: $key, property: $property}}' >"${success_body}"
   curl -fsS \
     -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer ${webhook_token}" \
     -o "${success_response}" \
     -d @"${success_body}" \
     "http://127.0.0.1:${local_port}/v1/resolve" >/dev/null
@@ -296,6 +303,7 @@ record_direct_metric_observations() {
     '{remoteRef: {key: $key, property: $property}}' >"${error_body}"
   status="$(curl -sS \
     -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer ${webhook_token}" \
     -o /dev/null \
     -w '%{http_code}' \
     -d @"${error_body}" \
@@ -321,11 +329,16 @@ spec:
       method: POST
       headers:
         Content-Type: application/json
+        Authorization: Bearer {{ index .auth "webhook-token" }}
+      secrets:
+        - name: auth
+          secretRef:
+            name: ${credentials_secret}
       body: |
         {
           "remoteRef": {
-            "key": "{{ .remoteRef.key }}",
-            "property": "{{ .remoteRef.property }}"
+            "key": {{ .remoteRef.key | toJson }},
+            "property": {{ .remoteRef.property | toJson }}
           }
         }
       result:

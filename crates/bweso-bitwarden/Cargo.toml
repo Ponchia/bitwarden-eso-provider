@@ -5,6 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
+description = "Bitwarden Password Manager and Vaultwarden client library for Bitwarden ESO Provider"
+repository.workspace = true
+homepage.workspace = true
+publish = false
 
 [lints]
 workspace = true

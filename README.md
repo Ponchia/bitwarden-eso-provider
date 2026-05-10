@@ -41,6 +41,8 @@ tagged release.
 - Local encrypted string and vault item decryption.
 - Whole-item extraction or one-field extraction through ESO `remoteRef`.
 - In-memory sync cache with explicit TTL and single-flight refresh behavior.
+- Bearer-token authentication on `/v1/resolve` by default; unauthenticated mode
+  is an explicit local-test setting.
 - Dedicated `/livez`, `/readyz`, and `/metrics` endpoints with redacted
   Prometheus-format runtime, HTTP, and resolution metrics.
 - Helm chart, ESO manifests, live smoke test script, architecture notes, threat
@@ -109,6 +111,7 @@ BWESO_SINGLE_ORIGIN_URL="https://vaultwarden.example.com" \
 BWESO_CLIENT_ID="user.<uuid>" \
 BWESO_CLIENT_SECRET="..." \
 BWESO_MASTER_PASSWORD="..." \
+BWESO_WEBHOOK_AUTH_TOKEN="..." \
 BWESO_CACHE_TTL_SECONDS=60 \
 cargo run -p bitwarden-eso-provider -- --listen 127.0.0.1:8080
 ```
@@ -121,6 +124,7 @@ BWESO_API_URL="https://api.bitwarden.com" \
 BWESO_CLIENT_ID="user.<uuid>" \
 BWESO_CLIENT_SECRET="..." \
 BWESO_MASTER_PASSWORD="..." \
+BWESO_WEBHOOK_AUTH_TOKEN="..." \
 BWESO_CACHE_TTL_SECONDS=60 \
 cargo run -p bitwarden-eso-provider -- --listen 127.0.0.1:8080
 ```
@@ -132,7 +136,10 @@ kubectl create namespace bweso-system
 kubectl -n bweso-system create secret generic bweso-credentials \
   --from-literal=client-id='user.<uuid>' \
   --from-literal=client-secret='...' \
-  --from-literal=master-password='...'
+  --from-literal=master-password='...' \
+  --from-literal=webhook-token='generate-a-long-random-token'
+kubectl -n bweso-system label secret bweso-credentials \
+  external-secrets.io/type=webhook
 
 helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
   --namespace bweso-system \
@@ -150,6 +157,9 @@ Compatibility details are in [`docs/compatibility.md`](docs/compatibility.md).
 Operational metrics and probe details are in
 [`docs/operations/observability.md`](docs/operations/observability.md).
 Live smoke-test instructions are in [`docs/live-testing.md`](docs/live-testing.md).
+Public repository and contribution expectations are in
+[`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md), and
+[`docs/repository-governance.md`](docs/repository-governance.md).
 
 ## License
 

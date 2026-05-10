@@ -10,8 +10,15 @@ kubectl create namespace bweso-system
 kubectl -n bweso-system create secret generic bweso-credentials \
   --from-literal=client-id='user.<uuid>' \
   --from-literal=client-secret='...' \
-  --from-literal=master-password='...'
+  --from-literal=master-password='...' \
+  --from-literal=webhook-token='generate-a-long-random-token'
+kubectl -n bweso-system label secret bweso-credentials \
+  external-secrets.io/type=webhook
 ```
+
+The provider rejects `/v1/resolve` calls without `Authorization: Bearer
+<webhook-token>` by default. The label lets ESO's webhook provider expose the
+Secret data as template variables for the authorization header.
 
 Install the webhook for Vaultwarden or single-origin self-hosted Bitwarden:
 
@@ -51,11 +58,16 @@ spec:
       method: POST
       headers:
         Content-Type: application/json
+        Authorization: Bearer {{ index .auth "webhook-token" }}
+      secrets:
+        - name: auth
+          secretRef:
+            name: bweso-credentials
       body: |
         {
           "remoteRef": {
-            "key": "{{ .remoteRef.key }}",
-            "property": "{{ .remoteRef.property }}"
+            "key": {{ .remoteRef.key | toJson }},
+            "property": {{ .remoteRef.property | toJson }}
           }
         }
       result:

@@ -4,3 +4,4 @@ target
 _references
 *.env
 .env
+.env.*

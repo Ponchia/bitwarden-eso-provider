@@ -1,0 +1,38 @@
+name: Feature request
+description: Propose a new capability or supported use case.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use case
+      description: What workflow should this enable?
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Backend
+      options:
+        - Bitwarden Cloud
+        - Vaultwarden
+        - Self-hosted Bitwarden
+        - Kubernetes or ESO behavior
+        - Helm chart or packaging
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the desired API, configuration, or operator behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include existing ESO, Bitwarden Secrets Manager, 1Password, or Kubernetes-native approaches if relevant.

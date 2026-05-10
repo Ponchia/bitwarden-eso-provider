@@ -2,6 +2,15 @@
 
 Required before calling a release generally usable:
 
+- Commit the public collaboration files: `CONTRIBUTING.md`, `SECURITY.md`,
+  `CODE_OF_CONDUCT.md`, `SUPPORT.md`, issue templates, pull request template,
+  and `CODEOWNERS`.
+- Apply the GitHub repository settings documented in
+  [`repository-governance.md`](repository-governance.md).
+- Make the repository public only after the branch is clean, pushed, and CI is
+  green.
+- Enable `main` branch protection immediately after GitHub allows it for the
+  repository.
 - Tag and publish a multi-arch image from GitHub Actions.
 - Run `scripts/live-eso-smoke.sh` against real Vaultwarden and Bitwarden Cloud
   accounts with k3s or a kind cluster with ESO installed.

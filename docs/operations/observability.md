@@ -8,6 +8,10 @@ Public error responses are intentionally coarse for the same reason. ESO may
 copy webhook error bodies into `ExternalSecret` status or events, so selector
 values are not echoed back on failures.
 
+`/v1/resolve` requires a bearer token by default. Authentication failures are
+reported as HTTP `401` with the `auth` resolution error class and no token or
+selector detail.
+
 ## Health Endpoints
 
 The provider exposes dedicated probe endpoints:
@@ -44,10 +48,10 @@ Current series:
 | `bweso_resolve_duration_seconds` | histogram | `outcome`, `error_kind`, `status` | End-to-end resolution latency. |
 
 Resolution labels are intentionally coarse. They expose classes like
-`validation`, `not_found`, `upstream_http`, `upstream_status`, `crypto`,
-`key_derivation`, `kdf_parameters`, `sync_payload`, `endpoint`, and
-`unsupported_version`. They do not expose vault item IDs, item names, requested
-properties, usernames, URLs, or secret values.
+`auth`, `validation`, `not_found`, `ambiguous_selector`, `upstream_http`,
+`upstream_status`, `crypto`, `key_derivation`, `kdf_parameters`,
+`sync_payload`, `endpoint`, and `unsupported_version`. They do not expose vault
+item IDs, item names, requested properties, usernames, URLs, or secret values.
 
 ## Prometheus Operator
 

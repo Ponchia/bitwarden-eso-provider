@@ -1,6 +1,9 @@
 config:
   singleOriginUrl: https://vaultwarden.example.com
 
+image:
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+
 credentials:
   existingSecret:
     name: bweso-credentials

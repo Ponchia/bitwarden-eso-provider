@@ -1,7 +1,11 @@
 #![forbid(unsafe_code)]
 
+use std::net::TcpStream;
 use std::{
+    fs,
+    io::{Read, Write},
     net::SocketAddr,
+    path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -18,14 +22,16 @@ use axum::{
 use bweso_bitwarden::{
     BitwardenApiClient, BitwardenApiError, BitwardenAuth, BitwardenCacheConfig,
     BitwardenClientError, BitwardenDevice, BitwardenEndpoint, BitwardenEndpoints,
-    BitwardenProvider, BitwardenSelector, CipherError,
+    BitwardenHttpConfig, BitwardenProvider, BitwardenSelector, CipherError,
 };
 use bweso_core::{require_non_empty, RemoteRef, SecretDocument};
 use clap::Parser;
-use http::{header, Request, StatusCode};
+use http::{header, HeaderMap, Request, StatusCode};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use url::Url;
 
 mod lifecycle;
 mod metrics;
@@ -45,11 +51,17 @@ struct Args {
     #[arg(long, env = "BWESO_API_URL")]
     api_url: Option<String>,
     #[arg(long, env = "BWESO_CLIENT_ID")]
-    client_id: String,
+    client_id: Option<String>,
+    #[arg(long, env = "BWESO_CLIENT_ID_FILE")]
+    client_id_file: Option<PathBuf>,
     #[arg(long, env = "BWESO_CLIENT_SECRET")]
-    client_secret: String,
+    client_secret: Option<String>,
+    #[arg(long, env = "BWESO_CLIENT_SECRET_FILE")]
+    client_secret_file: Option<PathBuf>,
     #[arg(long, env = "BWESO_MASTER_PASSWORD")]
-    master_password: String,
+    master_password: Option<String>,
+    #[arg(long, env = "BWESO_MASTER_PASSWORD_FILE")]
+    master_password_file: Option<PathBuf>,
     #[arg(
         long,
         env = "BWESO_DEVICE_IDENTIFIER",
@@ -66,11 +78,29 @@ struct Args {
     device_type: u8,
     #[arg(long, env = "BWESO_CACHE_TTL_SECONDS", default_value_t = 60)]
     cache_ttl_seconds: u64,
+    #[arg(long, env = "BWESO_HTTP_CONNECT_TIMEOUT_SECONDS", default_value_t = 5)]
+    http_connect_timeout_seconds: u64,
+    #[arg(long, env = "BWESO_HTTP_REQUEST_TIMEOUT_SECONDS", default_value_t = 25)]
+    http_request_timeout_seconds: u64,
+    #[arg(long, env = "BWESO_WEBHOOK_AUTH_TOKEN")]
+    webhook_auth_token: Option<String>,
+    #[arg(long, env = "BWESO_WEBHOOK_AUTH_TOKEN_FILE")]
+    webhook_auth_token_file: Option<PathBuf>,
+    #[arg(
+        long,
+        env = "BWESO_INSECURE_ALLOW_UNAUTHENTICATED",
+        default_value_t = false
+    )]
+    insecure_allow_unauthenticated: bool,
+    /// Run one HTTP healthcheck request and exit.
+    #[arg(long, env = "BWESO_HEALTHCHECK_URL")]
+    healthcheck_url: Option<String>,
 }
 
 #[derive(Clone)]
 struct AppState {
     provider: Arc<dyn BitwardenProvider>,
+    auth: WebhookAuth,
     metrics: Arc<AppMetrics>,
     lifecycle: Lifecycle,
 }
@@ -91,11 +121,17 @@ struct ErrorResponse {
 async fn main() -> anyhow::Result<()> {
     init_tracing();
     let args = Args::parse();
+    if let Some(url) = args.healthcheck_url.as_deref() {
+        run_healthcheck(url)?;
+        return Ok(());
+    }
+
     let listen = args.listen;
     let lifecycle = Lifecycle::default();
 
     let state = AppState {
-        provider: provider_from_args(args)?,
+        provider: provider_from_args(&args)?,
+        auth: WebhookAuth::from_args(&args)?,
         metrics: Arc::new(AppMetrics::new()),
         lifecycle: lifecycle.clone(),
     };
@@ -112,30 +148,115 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn provider_from_args(args: Args) -> anyhow::Result<Arc<dyn BitwardenProvider>> {
-    require_non_empty(&args.client_id, "client_id")?;
-    require_non_empty(&args.client_secret, "client_secret")?;
-    require_non_empty(&args.master_password, "master_password")?;
+fn run_healthcheck(raw_url: &str) -> anyhow::Result<()> {
+    let url = Url::parse(raw_url)?;
+    anyhow::ensure!(url.scheme() == "http", "healthcheck URL must use http");
+    let host = url
+        .host_str()
+        .ok_or_else(|| anyhow::anyhow!("healthcheck URL must include a host"))?;
+    let port = url
+        .port_or_known_default()
+        .ok_or_else(|| anyhow::anyhow!("healthcheck URL must include a port"))?;
+    let mut path = url.path().to_string();
+    if path.is_empty() {
+        path.push('/');
+    }
+    if let Some(query) = url.query() {
+        path.push('?');
+        path.push_str(query);
+    }
+
+    let mut stream = TcpStream::connect((host, port))?;
+    stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(2)))?;
+    write!(
+        stream,
+        "GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"
+    )?;
+
+    let mut response = String::new();
+    stream.read_to_string(&mut response)?;
+    let status_line = response
+        .lines()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("healthcheck returned an empty response"))?;
+    anyhow::ensure!(
+        status_line.starts_with("HTTP/1.1 2") || status_line.starts_with("HTTP/1.0 2"),
+        "healthcheck returned non-success status: {status_line}"
+    );
+    Ok(())
+}
+
+fn provider_from_args(args: &Args) -> anyhow::Result<Arc<dyn BitwardenProvider>> {
+    let client_id = read_sensitive_arg(
+        args.client_id.as_deref(),
+        args.client_id_file.as_deref(),
+        "client_id",
+    )?;
+    let client_secret = read_sensitive_arg(
+        args.client_secret.as_deref(),
+        args.client_secret_file.as_deref(),
+        "client_secret",
+    )?;
+    let master_password = read_sensitive_arg(
+        args.master_password.as_deref(),
+        args.master_password_file.as_deref(),
+        "master_password",
+    )?;
     require_non_empty(&args.device_identifier, "device_identifier")?;
     require_non_empty(&args.device_name, "device_name")?;
+    if args.http_connect_timeout_seconds == 0 {
+        bail!("http_connect_timeout_seconds must be greater than zero");
+    }
+    if args.http_request_timeout_seconds == 0 {
+        bail!("http_request_timeout_seconds must be greater than zero");
+    }
 
-    let endpoints = endpoints_from_args(&args)?;
+    let endpoints = endpoints_from_args(args)?;
     let auth = BitwardenAuth {
-        client_id: args.client_id,
-        client_secret: args.client_secret.into(),
-        master_password: args.master_password.into(),
+        client_id,
+        client_secret: client_secret.into(),
+        master_password: master_password.into(),
     };
     let device = BitwardenDevice {
         device_type: args.device_type,
-        identifier: args.device_identifier,
-        name: args.device_name,
+        identifier: args.device_identifier.clone(),
+        name: args.device_name.clone(),
     };
     let cache_config = BitwardenCacheConfig::new(Duration::from_secs(args.cache_ttl_seconds));
-    let provider =
-        BitwardenApiClient::with_endpoints_device_and_cache(endpoints, auth, device, cache_config)
-            .context("failed to build Bitwarden-compatible API client")?;
+    let http_config = BitwardenHttpConfig::new(
+        Duration::from_secs(args.http_connect_timeout_seconds),
+        Duration::from_secs(args.http_request_timeout_seconds),
+    );
+    let provider = BitwardenApiClient::with_endpoints_device_cache_and_http_config(
+        endpoints,
+        auth,
+        device,
+        cache_config,
+        http_config,
+    )
+    .context("failed to build Bitwarden-compatible API client")?;
 
     Ok(Arc::new(provider))
+}
+
+fn read_sensitive_arg(
+    value: Option<&str>,
+    file: Option<&Path>,
+    name: &'static str,
+) -> anyhow::Result<String> {
+    let resolved = match (value, file) {
+        (Some(_), Some(_)) => bail!("configure either {name} or {name}_file, not both"),
+        (Some(value), None) => value.to_string(),
+        (None, Some(path)) => fs::read_to_string(path)
+            .with_context(|| format!("failed to read {name}_file"))?
+            .trim_end_matches(['\r', '\n'])
+            .to_string(),
+        (None, None) => bail!("configure {name} or {name}_file"),
+    };
+
+    require_non_empty(&resolved, name)?;
+    Ok(resolved)
 }
 
 fn endpoints_from_args(args: &Args) -> anyhow::Result<BitwardenEndpoints> {
@@ -159,6 +280,97 @@ fn endpoints_from_args(args: &Args) -> anyhow::Result<BitwardenEndpoints> {
             "configure BWESO_SINGLE_ORIGIN_URL for single-origin Vaultwarden/self-hosted Bitwarden, or both BWESO_IDENTITY_URL and BWESO_API_URL for split Bitwarden endpoints"
         ),
     }
+}
+
+#[derive(Clone)]
+enum WebhookAuth {
+    Required(Arc<SecretString>),
+    DisabledInsecure,
+}
+
+impl WebhookAuth {
+    fn from_args(args: &Args) -> anyhow::Result<Self> {
+        let token = read_optional_sensitive_arg(
+            args.webhook_auth_token.as_deref(),
+            args.webhook_auth_token_file.as_deref(),
+            "webhook_auth_token",
+        )?;
+        match (
+            token.as_deref(),
+            args.insecure_allow_unauthenticated,
+        ) {
+            (Some(_), true) => bail!(
+                "configure either BWESO_WEBHOOK_AUTH_TOKEN or BWESO_INSECURE_ALLOW_UNAUTHENTICATED=true, not both"
+            ),
+            (Some(token), false) => Ok(Self::Required(Arc::new(token.to_string().into()))),
+            (None, true) => {
+                tracing::warn!(
+                    "webhook authentication is disabled; use only for local or isolated tests"
+                );
+                Ok(Self::DisabledInsecure)
+            }
+            (None, false) => bail!(
+                "configure BWESO_WEBHOOK_AUTH_TOKEN, or explicitly set BWESO_INSECURE_ALLOW_UNAUTHENTICATED=true for local tests"
+            ),
+        }
+    }
+
+    fn is_authorized(&self, headers: &HeaderMap) -> bool {
+        match self {
+            Self::DisabledInsecure => true,
+            Self::Required(expected) => {
+                let Some(raw) = headers.get(header::AUTHORIZATION) else {
+                    return false;
+                };
+                let Ok(raw) = raw.to_str() else {
+                    return false;
+                };
+                let Some((scheme, token)) = raw.split_once(' ') else {
+                    return false;
+                };
+                scheme.eq_ignore_ascii_case("Bearer")
+                    && !token.is_empty()
+                    && token.trim() == token
+                    && constant_time_eq(expected.expose_secret().as_bytes(), token.as_bytes())
+            }
+        }
+    }
+}
+
+fn read_optional_sensitive_arg(
+    value: Option<&str>,
+    file: Option<&Path>,
+    name: &'static str,
+) -> anyhow::Result<Option<String>> {
+    match (value, file) {
+        (Some(_), Some(_)) => bail!("configure either {name} or {name}_file, not both"),
+        (Some(value), None) => {
+            require_non_empty(value, name)?;
+            Ok(Some(value.to_string()))
+        }
+        (None, Some(path)) => {
+            let resolved = fs::read_to_string(path)
+                .with_context(|| format!("failed to read {name}_file"))?
+                .trim_end_matches(['\r', '\n'])
+                .to_string();
+            require_non_empty(&resolved, name)?;
+            Ok(Some(resolved))
+        }
+        (None, None) => Ok(None),
+    }
+}
+
+fn constant_time_eq(expected: &[u8], actual: &[u8]) -> bool {
+    let max_len = expected.len().max(actual.len());
+    let mut diff = expected.len() ^ actual.len();
+
+    for index in 0..max_len {
+        let expected_byte = expected.get(index).copied().unwrap_or(0);
+        let actual_byte = actual.get(index).copied().unwrap_or(0);
+        diff |= usize::from(expected_byte ^ actual_byte);
+    }
+
+    diff == 0
 }
 
 fn build_router(state: AppState) -> Router {
@@ -230,9 +442,20 @@ async fn record_http_metrics(
 
 async fn resolve(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(request): Json<ResolveRequest>,
 ) -> Result<Json<SecretDocument>, (StatusCode, Json<ErrorResponse>)> {
     let started = Instant::now();
+    if !state.auth.is_authorized(&headers) {
+        state.metrics.record_resolve_request(
+            StatusCode::UNAUTHORIZED,
+            "error",
+            "auth",
+            started.elapsed(),
+        );
+        return Err(auth_error());
+    }
+
     let selector = match BitwardenSelector::try_from(request.remote_ref) {
         Ok(selector) => selector,
         Err(error) => {
@@ -264,6 +487,15 @@ async fn resolve(
     }
 }
 
+fn auth_error() -> (StatusCode, Json<ErrorResponse>) {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(ErrorResponse {
+            error: public_error_message("auth").to_string(),
+        }),
+    )
+}
+
 fn provider_error(error: &BitwardenClientError) -> (StatusCode, Json<ErrorResponse>) {
     let (status, error_kind) = provider_status_and_kind(error);
     let message = public_error_message(error_kind).to_string();
@@ -278,8 +510,11 @@ fn provider_status_and_kind(error: &BitwardenClientError) -> (StatusCode, &'stat
             (StatusCode::BAD_REQUEST, "validation")
         }
         BitwardenClientError::Cipher(CipherError::MissingProperty { .. })
-        | BitwardenClientError::Api(BitwardenApiError::CipherNotFound { .. }) => {
+        | BitwardenClientError::Api(BitwardenApiError::CipherNotFound) => {
             (StatusCode::NOT_FOUND, "not_found")
+        }
+        BitwardenClientError::Api(BitwardenApiError::AmbiguousCipherName) => {
+            (StatusCode::CONFLICT, "ambiguous_selector")
         }
         BitwardenClientError::Api(BitwardenApiError::Http(_)) => {
             (StatusCode::BAD_GATEWAY, "upstream_http")
@@ -314,9 +549,11 @@ fn provider_status_and_kind(error: &BitwardenClientError) -> (StatusCode, &'stat
 
 fn public_error_message(error_kind: &str) -> &'static str {
     match error_kind {
+        "auth" => "provider authentication failed",
         "validation" => "invalid resolve request",
         "unsupported_version" => "remoteRef.version is not supported",
         "not_found" => "requested Bitwarden item or property was not found",
+        "ambiguous_selector" => "requested Bitwarden item name is ambiguous; use the item ID",
         "upstream_http" => "Bitwarden-compatible upstream request failed",
         "upstream_status" => "Bitwarden-compatible upstream returned an error status",
         "crypto" => "failed to decrypt selected Bitwarden item",
@@ -407,6 +644,16 @@ mod tests {
     fn test_state(provider: Arc<dyn BitwardenProvider>) -> AppState {
         AppState {
             provider,
+            auth: WebhookAuth::DisabledInsecure,
+            metrics: Arc::new(AppMetrics::new()),
+            lifecycle: Lifecycle::default(),
+        }
+    }
+
+    fn test_state_with_auth(provider: Arc<dyn BitwardenProvider>, token: &str) -> AppState {
+        AppState {
+            provider,
+            auth: WebhookAuth::Required(Arc::new(token.to_string().into())),
             metrics: Arc::new(AppMetrics::new()),
             lifecycle: Lifecycle::default(),
         }
@@ -418,13 +665,22 @@ mod tests {
             single_origin_url: Some("http://127.0.0.1:8081".to_string()),
             identity_url: None,
             api_url: None,
-            client_id: "user.fixture".to_string(),
-            client_secret: "super-secret-api-key".to_string(),
-            master_password: "super-secret-master-password".to_string(),
+            client_id: Some("user.fixture".to_string()),
+            client_id_file: None,
+            client_secret: Some("super-secret-api-key".to_string()),
+            client_secret_file: None,
+            master_password: Some("super-secret-master-password".to_string()),
+            master_password_file: None,
             device_identifier: "bweso-test".to_string(),
             device_name: "BWESO Test".to_string(),
             device_type: 22,
             cache_ttl_seconds: 60,
+            http_connect_timeout_seconds: 5,
+            http_request_timeout_seconds: 25,
+            webhook_auth_token: Some("test-webhook-token".to_string()),
+            webhook_auth_token_file: None,
+            insecure_allow_unauthenticated: false,
+            healthcheck_url: None,
         }
     }
 
@@ -433,7 +689,7 @@ mod tests {
         let mut args = valid_args();
         args.single_origin_url = Some("http://vault.example.test".to_string());
 
-        let Some(error) = provider_from_args(args).err() else {
+        let Some(error) = provider_from_args(&args).err() else {
             unreachable!("insecure remote endpoint should fail");
         };
         let error = format!("{error:#}");
@@ -452,7 +708,7 @@ mod tests {
         args.identity_url = Some("http://127.0.0.1:8081".to_string());
         args.api_url = Some("http://127.0.0.1:8082".to_string());
 
-        if let Err(error) = provider_from_args(args) {
+        if let Err(error) = provider_from_args(&args) {
             unreachable!("local split endpoints should be accepted: {error:#}");
         }
     }
@@ -463,7 +719,7 @@ mod tests {
         args.single_origin_url = None;
         args.identity_url = Some("http://127.0.0.1:8081".to_string());
 
-        let Some(error) = provider_from_args(args).err() else {
+        let Some(error) = provider_from_args(&args).err() else {
             unreachable!("partial split endpoint configuration should fail");
         };
 
@@ -478,7 +734,7 @@ mod tests {
         args.identity_url = Some("https://identity.bitwarden.com".to_string());
         args.api_url = Some("https://api.bitwarden.com".to_string());
 
-        let Some(error) = provider_from_args(args).err() else {
+        let Some(error) = provider_from_args(&args).err() else {
             unreachable!("mixed endpoint modes should fail");
         };
 
@@ -488,15 +744,157 @@ mod tests {
     #[test]
     fn provider_config_rejects_blank_credentials() {
         let mut args = valid_args();
-        args.client_secret = " ".to_string();
+        args.client_secret = Some(" ".to_string());
 
-        let Some(error) = provider_from_args(args).err() else {
+        let Some(error) = provider_from_args(&args).err() else {
             unreachable!("blank client secret should fail");
         };
 
         assert!(error
             .to_string()
             .contains("client_secret must not be empty"));
+    }
+
+    #[test]
+    fn provider_config_accepts_credentials_from_files() -> TestResult {
+        let dir = std::env::temp_dir().join(format!("bweso-provider-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir)?;
+        let client_id_file = dir.join("client-id");
+        let client_secret_file = dir.join("client-secret");
+        let master_password_file = dir.join("master-password");
+        std::fs::write(&client_id_file, "user.fixture\n")?;
+        std::fs::write(&client_secret_file, "super-secret-api-key\n")?;
+        std::fs::write(&master_password_file, "super-secret-master-password\n")?;
+
+        let mut args = valid_args();
+        args.client_id = None;
+        args.client_id_file = Some(client_id_file);
+        args.client_secret = None;
+        args.client_secret_file = Some(client_secret_file);
+        args.master_password = None;
+        args.master_password_file = Some(master_password_file);
+
+        let result = provider_from_args(&args);
+        std::fs::remove_dir_all(&dir)?;
+
+        if let Err(error) = result {
+            unreachable!("credential files should be accepted: {error:#}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn webhook_auth_requires_token_unless_explicitly_disabled() {
+        let mut args = valid_args();
+        args.webhook_auth_token = None;
+
+        let Some(error) = WebhookAuth::from_args(&args).err() else {
+            unreachable!("missing webhook token should fail");
+        };
+        assert!(error.to_string().contains("BWESO_WEBHOOK_AUTH_TOKEN"));
+
+        args.insecure_allow_unauthenticated = true;
+        if let Err(error) = WebhookAuth::from_args(&args) {
+            unreachable!("explicit insecure local mode should be accepted: {error:#}");
+        }
+    }
+
+    #[test]
+    fn webhook_auth_rejects_blank_token() {
+        let mut args = valid_args();
+        args.webhook_auth_token = Some(" ".to_string());
+
+        let Some(error) = WebhookAuth::from_args(&args).err() else {
+            unreachable!("blank webhook token should fail");
+        };
+        assert!(error
+            .to_string()
+            .contains("webhook_auth_token must not be empty"));
+    }
+
+    #[test]
+    fn public_error_messages_cover_all_error_classes() {
+        let expected = [
+            ("auth", "provider authentication failed"),
+            ("validation", "invalid resolve request"),
+            ("unsupported_version", "remoteRef.version is not supported"),
+            (
+                "not_found",
+                "requested Bitwarden item or property was not found",
+            ),
+            (
+                "ambiguous_selector",
+                "requested Bitwarden item name is ambiguous; use the item ID",
+            ),
+            (
+                "upstream_http",
+                "Bitwarden-compatible upstream request failed",
+            ),
+            (
+                "upstream_status",
+                "Bitwarden-compatible upstream returned an error status",
+            ),
+            ("crypto", "failed to decrypt selected Bitwarden item"),
+            ("key_derivation", "failed to unlock Bitwarden vault key"),
+            (
+                "kdf_parameters",
+                "Bitwarden-compatible KDF parameters are unsupported",
+            ),
+            (
+                "sync_payload",
+                "Bitwarden-compatible sync payload is missing required unlock data",
+            ),
+            ("endpoint", "provider endpoint configuration is invalid"),
+            ("unknown", "provider request failed"),
+        ];
+
+        for (kind, message) in expected {
+            assert_eq!(public_error_message(kind), message);
+        }
+    }
+
+    #[test]
+    fn healthcheck_accepts_successful_http_response() -> TestResult {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+        listener.set_nonblocking(true)?;
+        let address = listener.local_addr()?;
+        let handle = std::thread::spawn(move || -> std::io::Result<()> {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            let (mut stream, _) = loop {
+                match listener.accept() {
+                    Ok(connection) => break connection,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        if Instant::now() >= deadline {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::TimedOut,
+                                "healthcheck did not connect to test server",
+                            ));
+                        }
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(error) => return Err(error),
+                }
+            };
+            let mut request = [0_u8; 512];
+            let _ = stream.read(&mut request)?;
+            stream.write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")?;
+            Ok(())
+        });
+
+        run_healthcheck(&format!("http://{address}/livez"))?;
+        handle
+            .join()
+            .map_err(|_| "healthcheck test server panicked")??;
+        Ok(())
+    }
+
+    #[test]
+    fn healthcheck_rejects_non_http_urls() {
+        let Some(error) = run_healthcheck("https://127.0.0.1:8080/livez").err() else {
+            unreachable!("https healthcheck URL should fail");
+        };
+
+        assert!(error.to_string().contains("healthcheck URL must use http"));
     }
 
     #[tokio::test]
@@ -554,6 +952,58 @@ mod tests {
             document.data.get("DATABASE_URL"),
             Some(&"resolved-secret".to_string())
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn resolve_requires_bearer_token_when_configured() -> TestResult {
+        let app = build_router(test_state_with_auth(
+            Arc::new(StaticProvider),
+            "expected-webhook-token",
+        ));
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/v1/resolve")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        r#"{"remoteRef":{"key":"app/database","property":"DATABASE_URL"}}"#,
+                    ))?,
+            )
+            .await?;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/v1/resolve")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, "Bearer wrong-token")
+                    .body(Body::from(
+                        r#"{"remoteRef":{"key":"app/database","property":"DATABASE_URL"}}"#,
+                    ))?,
+            )
+            .await?;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/v1/resolve")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::AUTHORIZATION, "Bearer expected-webhook-token")
+                    .body(Body::from(
+                        r#"{"remoteRef":{"key":"app/database","property":"DATABASE_URL"}}"#,
+                    ))?,
+            )
+            .await?;
+        assert_eq!(response.status(), StatusCode::OK);
         Ok(())
     }
 

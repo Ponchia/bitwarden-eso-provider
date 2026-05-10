@@ -382,3 +382,51 @@ fn append_line(output: &mut String, arguments: fmt::Arguments<'_>) {
     }
     output.push('\n');
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn escapes_prometheus_label_values() {
+        let mut output = String::new();
+
+        append_labeled_metric(&mut output, "example_total", &[("label", "a\\b\"c\n")], "1");
+
+        assert_eq!(output, "example_total{label=\"a\\\\b\\\"c\\n\"} 1\n");
+    }
+
+    #[test]
+    fn histogram_renders_buckets_sum_and_count() {
+        let mut histogram = HistogramValues::default();
+        histogram.observe(Duration::from_millis(5));
+        histogram.observe(Duration::from_millis(11_000));
+        let mut output = String::new();
+
+        append_histogram(
+            &mut output,
+            "example_duration_seconds",
+            &[("route", "/v1/resolve")],
+            &histogram,
+        );
+
+        assert!(output
+            .contains("example_duration_seconds_bucket{route=\"/v1/resolve\",le=\"0.005\"} 1"));
+        assert!(
+            output.contains("example_duration_seconds_bucket{route=\"/v1/resolve\",le=\"+Inf\"} 2")
+        );
+        assert!(output.contains("example_duration_seconds_sum{route=\"/v1/resolve\"} 11.005000"));
+        assert!(output.contains("example_duration_seconds_count{route=\"/v1/resolve\"} 2"));
+    }
+
+    #[test]
+    fn histogram_includes_exact_bucket_boundary() {
+        let mut histogram = HistogramValues::default();
+
+        histogram.observe(Duration::from_millis(10));
+
+        assert_eq!(histogram.buckets[0], 0);
+        assert_eq!(histogram.buckets[1], 1);
+        assert_eq!(histogram.count, 1);
+    }
+}

@@ -305,19 +305,6 @@ impl DecryptedCipher {
             });
         }
 
-        if let Some(name) = &self.name {
-            document
-                .metadata
-                .insert("bitwarden.name".to_string(), name.clone());
-        }
-        document
-            .metadata
-            .insert("bitwarden.cipherId".to_string(), self.id.clone());
-        document.metadata.insert(
-            "bitwarden.cipherType".to_string(),
-            self.cipher_type.to_string(),
-        );
-
         Ok(document)
     }
 }
@@ -457,6 +444,78 @@ mod tests {
 
         assert!(matches!(error, CipherError::MissingProperty { .. }));
         Ok(())
+    }
+
+    #[test]
+    fn extracts_all_documented_property_aliases() -> Result<(), Box<dyn std::error::Error>> {
+        let decrypted = DecryptedCipher {
+            id: "cipher".to_string(),
+            cipher_type: 5,
+            organization_id: None,
+            name: Some("item-name".to_string()),
+            notes: Some("note-value".to_string()),
+            fields: vec![DecryptedField {
+                name: Some("CUSTOM".to_string()),
+                value: Some("custom-value".to_string()),
+                field_type: Some(1),
+            }],
+            login: Some(DecryptedLogin {
+                username: Some("user-value".to_string()),
+                password: Some("password-value".to_string()),
+                totp: Some("totp-value".to_string()),
+            }),
+            ssh_key: Some(DecryptedSshKey {
+                private_key: Some("private-key-value".to_string()),
+                public_key: Some("public-key-value".to_string()),
+                key_fingerprint: Some("fingerprint-value".to_string()),
+            }),
+        };
+
+        assert_eq!(decrypted.extract_property("notes")?, "note-value");
+        assert_eq!(decrypted.extract_property("login.username")?, "user-value");
+        assert_eq!(
+            decrypted.extract_property("login.password")?,
+            "password-value"
+        );
+        assert_eq!(decrypted.extract_property("login.totp")?, "totp-value");
+        assert_eq!(
+            decrypted.extract_property("sshKey.privateKey")?,
+            "private-key-value"
+        );
+        assert_eq!(
+            decrypted.extract_property("sshPublicKey")?,
+            "public-key-value"
+        );
+        assert_eq!(
+            decrypted.extract_property("sshKey.keyFingerprint")?,
+            "fingerprint-value"
+        );
+        assert_eq!(decrypted.extract_property("custom.CUSTOM")?, "custom-value");
+        Ok(())
+    }
+
+    #[test]
+    fn whole_cipher_document_omits_source_metadata() {
+        let decrypted = DecryptedCipher {
+            id: "cipher-login".to_string(),
+            cipher_type: 1,
+            organization_id: Some("organization-id".to_string()),
+            name: Some("item-name".to_string()),
+            notes: None,
+            fields: vec![],
+            login: Some(DecryptedLogin {
+                username: Some("app".to_string()),
+                password: Some("secret".to_string()),
+                totp: None,
+            }),
+            ssh_key: None,
+        };
+
+        let Ok(document) = decrypted.to_secret_document() else {
+            unreachable!("login cipher should have extractable fields");
+        };
+        assert_eq!(document.data.get("username"), Some(&"app".to_string()));
+        assert!(document.metadata.is_empty());
     }
 
     const LOGIN_CIPHER_JSON: &str = r#"

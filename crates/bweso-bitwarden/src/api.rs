@@ -22,6 +22,9 @@ use crate::{
 const BITWARDEN_CLIENT_VERSION: &str = "2025.12.0";
 const DEFAULT_DEVICE_TYPE_SERVER: u8 = 22;
 const DEFAULT_CACHE_TTL: Duration = Duration::from_secs(60);
+const DEFAULT_HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const DEFAULT_HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(25);
+const TOKEN_EXPIRY_REFRESH_SKEW: Duration = Duration::from_secs(30);
 
 /// Bitwarden-compatible HTTP API client.
 #[derive(Clone)]
@@ -32,6 +35,7 @@ pub struct BitwardenApiClient {
     device: BitwardenDevice,
     cache_config: BitwardenCacheConfig,
     cache: Arc<Mutex<Option<CachedVault>>>,
+    refresh_lock: Arc<Mutex<()>>,
 }
 
 impl BitwardenApiClient {
@@ -128,8 +132,33 @@ impl BitwardenApiClient {
         device: BitwardenDevice,
         cache_config: BitwardenCacheConfig,
     ) -> Result<Self, BitwardenApiError> {
+        Self::with_endpoints_device_cache_and_http_config(
+            endpoints,
+            auth,
+            device,
+            cache_config,
+            BitwardenHttpConfig::default(),
+        )
+    }
+
+    /// Build an API client from explicit endpoints, device identity, cache
+    /// settings, and HTTP timeout settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP client cannot be constructed.
+    pub fn with_endpoints_device_cache_and_http_config(
+        endpoints: BitwardenEndpoints,
+        auth: BitwardenAuth,
+        device: BitwardenDevice,
+        cache_config: BitwardenCacheConfig,
+        http_config: BitwardenHttpConfig,
+    ) -> Result<Self, BitwardenApiError> {
         let http = HttpClient::builder()
             .user_agent("bitwarden-eso-provider")
+            .connect_timeout(http_config.connect_timeout)
+            .timeout(http_config.request_timeout)
+            .redirect(reqwest::redirect::Policy::none())
             .build()?;
 
         Ok(Self {
@@ -139,6 +168,7 @@ impl BitwardenApiClient {
             device,
             cache_config,
             cache: Arc::new(Mutex::new(None)),
+            refresh_lock: Arc::new(Mutex::new(())),
         })
     }
 
@@ -250,15 +280,9 @@ impl BitwardenApiClient {
         &self,
         selector: BitwardenSelector,
     ) -> Result<SecretDocument, BitwardenClientError> {
-        let mut cache = self.cache.lock().await;
+        self.ensure_fresh_cached_sync().await?;
 
-        if cache
-            .as_ref()
-            .is_none_or(|cached| !cached.is_fresh(self.cache_config.ttl))
-        {
-            *cache = Some(self.fetch_vault().await?);
-        }
-
+        let cache = self.cache.lock().await;
         let cached = cache.as_ref().ok_or(BitwardenApiError::MissingCachedSync)?;
         let cipher =
             Self::resolve_synced_cipher(&cached.sync, &cached.session.user_key, &selector.key)?;
@@ -275,15 +299,35 @@ impl BitwardenApiClient {
         Ok(cipher.to_secret_document()?)
     }
 
+    async fn ensure_fresh_cached_sync(&self) -> Result<(), BitwardenClientError> {
+        if self.has_fresh_cache().await {
+            return Ok(());
+        }
+
+        let _guard = self.refresh_lock.lock().await;
+        if self.has_fresh_cache().await {
+            return Ok(());
+        }
+
+        let refreshed = self.fetch_vault().await?;
+        let mut cache = self.cache.lock().await;
+        *cache = Some(refreshed);
+        Ok(())
+    }
+
+    async fn has_fresh_cache(&self) -> bool {
+        self.cache
+            .lock()
+            .await
+            .as_ref()
+            .is_some_and(|cached| cached.is_fresh(self.cache_config.ttl))
+    }
+
     async fn fetch_vault(&self) -> Result<CachedVault, BitwardenClientError> {
         let session = self.login_with_api_key().await?;
         let sync = self.sync(&session).await?;
 
-        Ok(CachedVault {
-            session,
-            sync,
-            fetched_at: Instant::now(),
-        })
+        Ok(CachedVault::new(session, sync, Instant::now()))
     }
 
     fn resolve_synced_cipher(
@@ -291,6 +335,8 @@ impl BitwardenApiClient {
         user_key: &AuthenticatedSymmetricKey,
         key: &str,
     ) -> Result<DecryptedCipher, BitwardenClientError> {
+        let mut name_match = None;
+
         for cipher in &sync.ciphers {
             if cipher.id == key {
                 return Ok(cipher.decrypt(user_key)?);
@@ -298,15 +344,15 @@ impl BitwardenApiClient {
 
             if let Ok(decrypted) = cipher.decrypt(user_key) {
                 if decrypted.name.as_deref() == Some(key) {
-                    return Ok(decrypted);
+                    if name_match.is_some() {
+                        return Err(BitwardenApiError::AmbiguousCipherName.into());
+                    }
+                    name_match = Some(decrypted);
                 }
             }
         }
 
-        Err(BitwardenApiError::CipherNotFound {
-            key: key.to_string(),
-        }
-        .into())
+        name_match.ok_or_else(|| BitwardenApiError::CipherNotFound.into())
     }
 
     fn endpoint_url(base_url: &Url, segments: &[&str]) -> Result<Url, BitwardenApiError> {
@@ -370,15 +416,69 @@ impl Default for BitwardenCacheConfig {
     }
 }
 
+/// HTTP timeout settings for the Bitwarden-compatible API client.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct BitwardenHttpConfig {
+    connect_timeout: Duration,
+    request_timeout: Duration,
+}
+
+impl BitwardenHttpConfig {
+    /// Build HTTP settings with explicit connect and whole-request timeouts.
+    #[must_use]
+    pub const fn new(connect_timeout: Duration, request_timeout: Duration) -> Self {
+        Self {
+            connect_timeout,
+            request_timeout,
+        }
+    }
+}
+
+impl Default for BitwardenHttpConfig {
+    fn default() -> Self {
+        Self {
+            connect_timeout: DEFAULT_HTTP_CONNECT_TIMEOUT,
+            request_timeout: DEFAULT_HTTP_REQUEST_TIMEOUT,
+        }
+    }
+}
+
 struct CachedVault {
     session: BitwardenSession,
     sync: SyncResponse,
     fetched_at: Instant,
+    expires_at: Option<Instant>,
 }
 
 impl CachedVault {
+    fn new(session: BitwardenSession, sync: SyncResponse, fetched_at: Instant) -> Self {
+        let expires_at = session
+            .expires_in
+            .and_then(|seconds| fetched_at.checked_add(Duration::from_secs(seconds)));
+
+        Self {
+            session,
+            sync,
+            fetched_at,
+            expires_at,
+        }
+    }
+
     fn is_fresh(&self, ttl: Duration) -> bool {
-        !ttl.is_zero() && self.fetched_at.elapsed() < ttl
+        self.is_fresh_at(ttl, Instant::now())
+    }
+
+    fn is_fresh_at(&self, ttl: Duration, now: Instant) -> bool {
+        if ttl.is_zero() || now.duration_since(self.fetched_at) >= ttl {
+            return false;
+        }
+
+        match self.expires_at {
+            Some(expires_at) => expires_at
+                .checked_sub(TOKEN_EXPIRY_REFRESH_SKEW)
+                .is_some_and(|refresh_deadline| now < refresh_deadline),
+            None => true,
+        }
     }
 }
 
@@ -649,11 +749,11 @@ pub enum BitwardenApiError {
     #[error("Bitwarden-compatible sync cache is empty after refresh")]
     MissingCachedSync,
     /// Requested cipher was not present in the sync response.
-    #[error("Bitwarden-compatible cipher {key} was not found")]
-    CipherNotFound {
-        /// Requested selector key.
-        key: String,
-    },
+    #[error("Bitwarden-compatible cipher was not found")]
+    CipherNotFound,
+    /// More than one cipher matched the requested item name.
+    #[error("Bitwarden-compatible cipher name is ambiguous")]
+    AmbiguousCipherName,
 }
 
 #[cfg(test)]
@@ -683,6 +783,8 @@ mod tests {
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
     const PASSWORD: &str = "correct horse battery staple";
+    const KEY_B64: &str =
+        "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+Pw==";
     const WRAPPED_CIPHER_TEST_KEY: &str =
         "2.AAECAwQFBgcICQoLDA0ODw==|rjzJWhStJXa0gPxMK+QGHB11ccKE8Q8NPFwsxqnI2yjMiiEWnwgY5nr1JWhyD4A5Sk4zDqfAoY91Gkr2QBfYQW14lXNe3qb+pHOsLqJ2Qa0=|Jsse4qMpeoqJ6VzlA9ta9PXyWNBJGfyPgRxFo5RupbE=";
     const LOGIN_CIPHER_JSON: &str = r#"
@@ -872,10 +974,70 @@ mod tests {
             document.data.get("DATABASE_URL"),
             Some(&"postgres://app:secret@db:5432/app".to_string())
         );
-        assert_eq!(
-            document.metadata.get("bitwarden.cipherId"),
-            Some(&"cipher-login".to_string())
+        assert!(document.metadata.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn name_lookup_rejects_ambiguous_cipher_names() -> TestResult {
+        let user_key = AuthenticatedSymmetricKey::from_base64(KEY_B64)?;
+        let first = serde_json::from_str::<EncryptedCipher>(LOGIN_CIPHER_JSON)?;
+        let mut second = serde_json::from_str::<EncryptedCipher>(LOGIN_CIPHER_JSON)?;
+        second.id = "cipher-login-copy".to_string();
+        let sync = SyncResponse {
+            ciphers: vec![first, second],
+        };
+
+        let Err(error) =
+            BitwardenApiClient::resolve_synced_cipher(&sync, &user_key, "app/database")
+        else {
+            unreachable!("duplicate item names should be ambiguous");
+        };
+
+        assert!(matches!(
+            error,
+            BitwardenClientError::Api(BitwardenApiError::AmbiguousCipherName)
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn cached_vault_freshness_respects_ttl_and_token_expiry() -> TestResult {
+        let now = Instant::now();
+        let sync = SyncResponse { ciphers: vec![] };
+
+        let fresh = CachedVault::new(fake_session(Some(3600))?, sync, now);
+        assert!(fresh.is_fresh(Duration::from_secs(60)));
+
+        let Some(stale_fetched_at) = now.checked_sub(Duration::from_secs(61)) else {
+            unreachable!("test instant should support a short subtraction");
+        };
+        let expired_ttl = CachedVault::new(
+            fake_session(Some(3600))?,
+            SyncResponse { ciphers: vec![] },
+            stale_fetched_at,
         );
+        assert!(!expired_ttl.is_fresh(Duration::from_secs(60)));
+
+        let expiring_token = CachedVault::new(
+            fake_session(Some(20))?,
+            SyncResponse { ciphers: vec![] },
+            now,
+        );
+        assert!(!expiring_token.is_fresh(Duration::from_secs(60)));
+        Ok(())
+    }
+
+    #[test]
+    fn cached_vault_is_stale_at_token_refresh_deadline() -> TestResult {
+        let now = Instant::now();
+        let vault = CachedVault::new(
+            fake_session(Some(TOKEN_EXPIRY_REFRESH_SKEW.as_secs()))?,
+            SyncResponse { ciphers: vec![] },
+            now,
+        );
+
+        assert!(!vault.is_fresh_at(Duration::from_secs(60), now));
         Ok(())
     }
 
@@ -1162,5 +1324,16 @@ mod tests {
 
     fn socket_addr(address: SocketAddr) -> String {
         address.to_string()
+    }
+
+    fn fake_session(
+        expires_in: Option<u64>,
+    ) -> Result<BitwardenSession, Box<dyn std::error::Error>> {
+        Ok(BitwardenSession {
+            access_token: "fake-access-token".to_string().into(),
+            expires_in,
+            token_type: "Bearer".to_string(),
+            user_key: AuthenticatedSymmetricKey::from_base64(KEY_B64)?,
+        })
     }
 }

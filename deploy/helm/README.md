@@ -13,7 +13,9 @@ The default chart shape is intentionally small:
 - Startup, liveness, and readiness probes enabled by default.
 - Prometheus metrics exposed by the pod, with optional `ServiceMonitor`
   rendering when Prometheus Operator CRDs are installed.
-- Optional NetworkPolicy template.
+- Webhook bearer-token authentication enabled by default.
+- Baseline resource requests/limits, seccomp, and NetworkPolicy enabled by
+  default. Tune egress rules for private Bitwarden or Vaultwarden endpoints.
 
 Render it locally with non-secret lint values:
 
