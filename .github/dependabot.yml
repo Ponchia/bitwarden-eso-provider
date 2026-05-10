@@ -12,6 +12,12 @@ updates:
           - hmac
           - pbkdf2
           - sha2
+    ignore:
+      # cbc 0.2 moves to cipher 0.5 while the current aes stack still uses cipher 0.4.
+      # Revisit as an intentional grouped block-cipher migration.
+      - dependency-name: cbc
+        update-types:
+          - version-update:semver-minor
 
   - package-ecosystem: github-actions
     directory: /
