@@ -7,6 +7,9 @@ Recommended order:
 
 - `secretstore-webhook.example.yaml`: namespace-local `SecretStore`.
 - `externalsecret.example.yaml`: single-field sync using `id:<item-id>`.
+- `secretstore-webhook-map.example.yaml`: namespace-local `SecretStore` for
+  whole-item `dataFrom.extract` sync.
+- `whole-item.example.yaml`: whole-item extraction into a target Secret.
 - `secret-types.example.yaml`: docker config JSON, basic auth, SSH auth, and
   multiline files.
 - `reloader.example.yaml`: Stakater Reloader annotation pattern.
@@ -39,6 +42,11 @@ namespaces as the ESO auth Secret. Configure the Helm chart's
 the provider credentials can see more vault items than the namespace should
 read.
 
+Selector policy matches only the raw ESO `remoteRef.key` or `dataFrom.extract.key`.
+It does not restrict individual properties on an allowed item. Treat each
+allowed item as fully readable by every namespace that can use the matching
+`SecretStore`, and use dedicated provider credentials for stronger isolation.
+
 The ExternalSecret examples use `creationPolicy: Orphan`,
 `deletionPolicy: Retain`, and template `mergePolicy: Merge`. That combination
 lets ESO recreate a missing target Secret, avoids deleting target Secrets when
@@ -48,3 +56,8 @@ provider-sourced keys.
 For migrated Kubernetes Secret keys, prefer `field.<key>` properties. Bare
 `username` and `password` mean Bitwarden login fields, while `field.username`
 and `field.password` mean custom fields with those names.
+
+Whole-item extraction maps the selected item's conventional fields and custom
+field names directly to Kubernetes Secret keys. Use one-field `data` entries
+instead when an item has custom field names that are not valid Kubernetes
+Secret keys or when only a subset of the item should be exposed.

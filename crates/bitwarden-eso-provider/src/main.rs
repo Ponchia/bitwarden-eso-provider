@@ -1,10 +1,9 @@
 #![forbid(unsafe_code)]
 
-use std::net::TcpStream;
 use std::{
     fs,
     io::{Read, Write},
-    net::SocketAddr,
+    net::{SocketAddr, TcpStream},
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
@@ -209,6 +208,28 @@ fn normalize_policy_entries(entries: &[String], name: &'static str) -> anyhow::R
 }
 
 fn run_healthcheck(raw_url: &str) -> anyhow::Result<()> {
+    let target = parse_healthcheck_target(raw_url)?;
+    let mut stream = TcpStream::connect((target.host.as_str(), target.port))?;
+    stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(2)))?;
+    write!(
+        stream,
+        "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+        target.path, target.host
+    )?;
+
+    let mut response = String::new();
+    stream.read_to_string(&mut response)?;
+    ensure_successful_healthcheck_response(&response)
+}
+
+struct HealthcheckTarget {
+    host: String,
+    port: u16,
+    path: String,
+}
+
+fn parse_healthcheck_target(raw_url: &str) -> anyhow::Result<HealthcheckTarget> {
     let url = Url::parse(raw_url)?;
     anyhow::ensure!(url.scheme() == "http", "healthcheck URL must use http");
     let host = url
@@ -217,6 +238,15 @@ fn run_healthcheck(raw_url: &str) -> anyhow::Result<()> {
     let port = url
         .port_or_known_default()
         .ok_or_else(|| anyhow::anyhow!("healthcheck URL must include a port"))?;
+
+    Ok(HealthcheckTarget {
+        host: host.to_string(),
+        port,
+        path: healthcheck_request_path(&url),
+    })
+}
+
+fn healthcheck_request_path(url: &Url) -> String {
     let mut path = url.path().to_string();
     if path.is_empty() {
         path.push('/');
@@ -226,16 +256,10 @@ fn run_healthcheck(raw_url: &str) -> anyhow::Result<()> {
         path.push_str(query);
     }
 
-    let mut stream = TcpStream::connect((host, port))?;
-    stream.set_read_timeout(Some(Duration::from_secs(2)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(2)))?;
-    write!(
-        stream,
-        "GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"
-    )?;
+    path
+}
 
-    let mut response = String::new();
-    stream.read_to_string(&mut response)?;
+fn ensure_successful_healthcheck_response(response: &str) -> anyhow::Result<()> {
     let status_line = response
         .lines()
         .next()

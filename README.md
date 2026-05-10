@@ -39,7 +39,8 @@ tagged release.
 - API-key login and sync for Bitwarden-compatible Password Manager servers.
 - Master-password user-key unlock for PBKDF2-SHA256 and Argon2id accounts.
 - Local encrypted string and vault item decryption.
-- Whole-item extraction or one-field extraction through ESO `remoteRef`.
+- Whole-item extraction through ESO `dataFrom.extract` and one-field
+  extraction through ESO `remoteRef`.
 - Explicit `id:<item-id>` and `name:<item-name>` selectors. Bare selectors keep
   the pre-release ID-then-name behavior, but `id:` is recommended for
   production.
@@ -50,8 +51,8 @@ tagged release.
   is an explicit local-test setting.
 - Dedicated `/livez`, `/readyz`, and `/metrics` endpoints with redacted
   Prometheus-format runtime, HTTP, and resolution metrics.
-- Helm chart, ESO manifests, live smoke test script, architecture notes, threat
-  model, and release checklist.
+- Helm chart, ESO manifests, optional Grafana/Prometheus examples, live smoke
+  test script, architecture notes, threat model, and release checklist.
 
 Current intentional limits:
 
@@ -183,6 +184,12 @@ For migrated Kubernetes Secret keys, use `field.<key>` properties so custom
 fields named `username` or `password` do not collide with Bitwarden login
 fields. Use a broad `ClusterSecretStore` only when every namespace allowed to
 reference it is in the same trust boundary.
+
+Selector policy is item-key scoped. If a namespace can request an allowed
+`remoteRef.key`, it can request any property on that item and can use whole-item
+extraction unless your ESO manifests, RBAC, and GitOps review prevent that. For
+strict isolation, use dedicated provider credentials per namespace or trust
+boundary plus exact `id:` allowlists.
 
 For target Secrets that should survive GitOps mistakes and be recreated after
 manual deletion, use ESO's `creationPolicy: Orphan`, `deletionPolicy: Retain`,

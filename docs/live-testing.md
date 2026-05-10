@@ -64,12 +64,13 @@ by this project. Do not run live tests against a personal daily-use account.
 ## Live ESO Smoke Test
 
 `scripts/live-eso-smoke.sh` deploys the Helm chart into a temporary namespace,
-creates a namespace-local `SecretStore`, syncs an `ExternalSecret`, verifies
-target Secret recreation with identical data, restarts the webhook Deployment,
-forces another sync, checks expected error cases for missing items/properties
-and selector-policy denial, and verifies `/livez`, `/readyz`, `/metrics`,
-successful/error/cache metrics, and metric redaction. It does not print
-decrypted values.
+creates namespace-local `SecretStore` resources for single-field and whole-item
+sync, verifies `ExternalSecret` sync through `data` and `dataFrom.extract`,
+checks target Secret recreation with identical data, restarts the webhook
+Deployment, forces another sync, checks expected error cases for missing
+items/properties and selector-policy denial, and verifies `/livez`, `/readyz`,
+`/metrics`, successful/error/cache metrics, and metric redaction. It does not
+print decrypted values.
 
 Required:
 

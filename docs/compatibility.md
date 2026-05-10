@@ -61,12 +61,13 @@ The live smoke test can be aimed at either layout:
 Live verification status:
 
 - Vaultwarden single-origin: verified against a real k3s cluster with External
-  Secrets Operator on 2026-05-10, including selector policy, target Secret
-  recreation, webhook restart, negative cases, and redacted metrics.
+  Secrets Operator on 2026-05-10, including selector policy, single-field and
+  whole-item sync, target Secret recreation, webhook restart, negative cases,
+  and redacted metrics.
 - Bitwarden Cloud US split endpoints: verified against a dedicated live account
   and a real k3s cluster with External Secrets Operator on 2026-05-10,
-  including selector policy, target Secret recreation, webhook restart,
-  negative cases, and redacted metrics.
+  including selector policy, single-field and whole-item sync, target Secret
+  recreation, webhook restart, negative cases, and redacted metrics.
 
 ## Current Scope
 
@@ -77,9 +78,12 @@ Implemented:
 - Authenticated Bitwarden encrypted strings.
 - Login, secure-note notes, custom fields, TOTP fields, and SSH key fields.
 - Personal vault item sync against single-origin and split endpoint layouts.
+- Single-field ESO sync through `remoteRef` and whole-item ESO sync through
+  `dataFrom.extract`.
 - `id:<item-id>` and `name:<item-name>` selectors. Bare selectors currently try
   ID first and then decrypted item name for pre-release compatibility.
 - Provider-side selector policy based on exact raw keys and raw key prefixes.
+  This policy gates item keys, not individual item properties.
 
 Not yet implemented:
 

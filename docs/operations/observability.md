@@ -74,6 +74,19 @@ metrics:
 If `networkPolicy.enabled=true`, make sure the ingress rules allow traffic from
 the Prometheus scraper namespace to the provider Service on the `http` port.
 
+## Dashboard And Alerts
+
+Optional examples are included but are not installed by the Helm chart:
+
+- [`../../examples/grafana/bitwarden-eso-provider-dashboard.json`](../../examples/grafana/bitwarden-eso-provider-dashboard.json)
+  is an importable Grafana dashboard for readiness, request rates, error
+  classes, latency, cache refreshes, and cache hit ratio.
+- [`../../examples/prometheus/bitwarden-eso-provider-rules.yaml`](../../examples/prometheus/bitwarden-eso-provider-rules.yaml)
+  is a Prometheus Operator `PrometheusRule` starting point.
+
+Review datasource names, labels, alert severities, thresholds, and routing
+before applying them to a real cluster.
+
 ## Useful Alerts
 
 Example PromQL starting points:

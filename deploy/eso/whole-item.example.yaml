@@ -1,0 +1,22 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: app-whole-item
+spec:
+  refreshPolicy: Periodic
+  refreshInterval: 1h
+  secretStoreRef:
+    name: bitwarden-map
+    kind: SecretStore
+  target:
+    name: app-whole-item
+    creationPolicy: Orphan
+    deletionPolicy: Retain
+    template:
+      mergePolicy: Merge
+  dataFrom:
+    - extract:
+        # Prefer id:<item-id> for production so item renames cannot change the
+        # selected source. The selected item's extracted field names become
+        # Kubernetes Secret keys.
+        key: id:00000000-0000-0000-0000-000000000000

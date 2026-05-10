@@ -26,8 +26,9 @@ This project should own:
 - Master-password user-key unlock.
 - Bitwarden and Vaultwarden API-key login and sync.
 - Provider-level caching and rate limiting.
-- Provider-side selector policy to constrain which raw ESO `remoteRef.key`
-  values a deployment may resolve.
+- Provider-side selector policy to constrain which raw ESO `remoteRef.key` or
+  `dataFrom.extract.key` values a deployment may resolve. This is an item-key
+  boundary, not per-property authorization.
 - Redacted JSON logs, Prometheus metrics, Kubernetes health probes, and graceful
   shutdown readiness behavior.
 - A small HTTP contract usable by ESO's generic webhook provider.

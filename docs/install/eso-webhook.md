@@ -56,6 +56,12 @@ Bitwarden/Vaultwarden account itself is already scoped to the trust boundary.
 When either list is configured, every non-matching selector returns `403`
 without echoing the requested key.
 
+Selector policy is item-key scoped, not property scoped. If a namespace can
+request an allowed `remoteRef.key` or `dataFrom.extract.key`, it can request any
+property on that item and can request whole-item extraction unless your ESO
+manifests, RBAC, and GitOps review prevent it. Use one dedicated provider
+credential per namespace or trust boundary for strict isolation.
+
 Create a token-only webhook auth Secret in each namespace that uses a
 namespace-local `SecretStore`:
 
@@ -142,6 +148,15 @@ Single-property responses always expose the selected value at `$.data.value`, so
 the `SecretStore` does not need JSONPath templating for field names. See
 [`../../deploy/eso`](../../deploy/eso) for Secret type, Reloader,
 `ClusterSecretStore`, and NetworkPolicy examples.
+
+Whole-item `dataFrom.extract` uses a separate webhook `SecretStore` shape with
+`result.jsonPath: "$.data"` and a request body that omits
+`remoteRef.property`; see
+[`../../deploy/eso/secretstore-webhook-map.example.yaml`](../../deploy/eso/secretstore-webhook-map.example.yaml)
+and [`../../deploy/eso/whole-item.example.yaml`](../../deploy/eso/whole-item.example.yaml).
+Whole-item extraction exposes every extractable conventional field and custom
+field on the selected item, so prefer one-field `data` entries when you need a
+narrower target Secret.
 
 The chart configures startup, liveness, and readiness probes by default:
 

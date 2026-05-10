@@ -32,8 +32,12 @@ Required before calling a release generally usable:
   provider errors in `ExternalSecret` status and events.
 - Verify `/livez`, `/readyz`, `/metrics`, default probes, and optional
   `ServiceMonitor` rendering.
+- Import or lint the example Grafana dashboard and validate the example
+  PrometheusRule before release.
 - Keep Helm chart schema validation in sync with supported values.
 - Verify provider-side selector policy returns redacted `403` failures.
+- Verify selector policy documentation is clear that policy is item-key scoped,
+  not property scoped.
 - Verify unsupported organization/shared items and attachment properties fail
   explicitly and are documented.
 

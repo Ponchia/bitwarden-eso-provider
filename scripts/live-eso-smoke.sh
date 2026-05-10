@@ -79,6 +79,7 @@ credentials_secret="$(first_env BWESO_E2E_CREDENTIALS_SECRET || true)"
 credentials_secret="${credentials_secret:-bweso-live-credentials}"
 pull_secret="$(first_env BWESO_E2E_IMAGE_PULL_SECRET || true)"
 target_secret="bweso-smoke-secret"
+whole_target_secret="bweso-whole-item-secret"
 selector_file="$(first_env BWESO_E2E_SELECTOR_FILE || true)"
 cleanup_namespace=true
 if truthy "$(first_env BWESO_E2E_KEEP_NAMESPACE || true)"; then
@@ -395,6 +396,33 @@ spec:
       timeout: 10s
 ---
 apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: bitwarden-live-map
+  namespace: ${namespace}
+spec:
+  provider:
+    webhook:
+      url: "http://${service_name}.${namespace}.svc.cluster.local:8080/v1/resolve"
+      method: POST
+      headers:
+        Content-Type: application/json
+        Authorization: Bearer {{ index .auth "webhook-token" }}
+      secrets:
+        - name: auth
+          secretRef:
+            name: ${credentials_secret}
+      body: |
+        {
+          "remoteRef": {
+            "key": {{ .remoteRef.key | toJson }}
+          }
+        }
+      result:
+        jsonPath: "$.data"
+      timeout: 10s
+---
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: bweso-smoke
@@ -416,6 +444,27 @@ spec:
       remoteRef:
         key: "${item_key}"
         property: "${property}"
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: bweso-whole-item
+  namespace: ${namespace}
+spec:
+  refreshPolicy: Periodic
+  refreshInterval: 10s
+  secretStoreRef:
+    name: bitwarden-live-map
+    kind: SecretStore
+  target:
+    name: ${whole_target_secret}
+    creationPolicy: Orphan
+    deletionPolicy: Retain
+    template:
+      mergePolicy: Merge
+  dataFrom:
+    - extract:
+        key: "${item_key}"
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
@@ -493,6 +542,8 @@ log "applying ESO smoke resources"
 log "waiting for successful sync"
 "${kubectl_cmd[@]}" -n "${namespace}" wait externalsecret/bweso-smoke \
   --for=condition=Ready --timeout=180s >/dev/null
+"${kubectl_cmd[@]}" -n "${namespace}" wait externalsecret/bweso-whole-item \
+  --for=condition=Ready --timeout=180s >/dev/null
 
 wait_secret_nonempty() {
   local name="$1"
@@ -510,7 +561,21 @@ wait_secret_nonempty() {
   fail "Secret ${name} did not contain non-empty key ${key}"
 }
 
+wait_secret_has_data() {
+  local name="$1"
+  local deadline=$((SECONDS + 120))
+  while (( SECONDS < deadline )); do
+    if "${kubectl_cmd[@]}" -n "${namespace}" get secret "${name}" -o json 2>/dev/null \
+      | jq -e '.data | length > 0' >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  fail "Secret ${name} did not contain any data keys"
+}
+
 wait_secret_nonempty "${target_secret}" resolved
+wait_secret_has_data "${whole_target_secret}"
 original_resolved="$("${kubectl_cmd[@]}" -n "${namespace}" get secret "${target_secret}" \
   -o jsonpath='{.data.resolved}')"
 [[ -n "${original_resolved}" ]] || fail "Secret ${target_secret} had an empty resolved value before recreation"

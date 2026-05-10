@@ -61,6 +61,19 @@ jobs:
           --set-string 'hostAliases[0].ip=10.43.186.117'
           --set-string 'hostAliases[0].hostnames[0]=vaultwarden.example.com'
 
+      - name: Render chart with ServiceMonitor
+        run: >
+          helm template bweso deploy/helm/bitwarden-eso-provider
+          -f deploy/helm/lint-values.yaml
+          --namespace bweso-system
+          --set metrics.serviceMonitor.enabled=true
+          --set-string 'metrics.serviceMonitor.labels.release=prometheus'
+
+      - name: Validate observability examples
+        run: |
+          jq -e . examples/grafana/*.json >/dev/null
+          ruby -e 'require "yaml"; ARGV.each { |path| YAML.safe_load(File.read(path), aliases: true) }' examples/prometheus/*.yaml
+
   security:
     name: Security
     runs-on: ubuntu-latest

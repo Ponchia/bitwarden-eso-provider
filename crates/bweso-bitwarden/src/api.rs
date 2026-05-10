@@ -1216,6 +1216,69 @@ mod tests {
     }
 
     #[test]
+    fn explicit_name_lookup_rejects_ambiguous_cipher_names() -> TestResult {
+        let user_key = AuthenticatedSymmetricKey::from_base64(KEY_B64)?;
+        let first = serde_json::from_str::<EncryptedCipher>(LOGIN_CIPHER_JSON)?;
+        let mut second = serde_json::from_str::<EncryptedCipher>(LOGIN_CIPHER_JSON)?;
+        second.id = "cipher-login-copy".to_string();
+        let sync = SyncResponse {
+            ciphers: vec![first, second],
+        };
+
+        let Err(error) =
+            BitwardenApiClient::resolve_synced_cipher(&sync, &user_key, "name:app/database")
+        else {
+            unreachable!("duplicate explicit item names should be ambiguous");
+        };
+
+        assert!(matches!(
+            error,
+            BitwardenClientError::Api(BitwardenApiError::AmbiguousCipherName)
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn name_lookup_reports_unsupported_shared_item() -> TestResult {
+        let user_key = AuthenticatedSymmetricKey::from_base64(KEY_B64)?;
+        let mut cipher = serde_json::from_str::<EncryptedCipher>(LOGIN_CIPHER_JSON)?;
+        cipher.organization_id = Some("organization-id".to_string());
+        let sync = SyncResponse {
+            ciphers: vec![cipher],
+        };
+
+        let Err(error) =
+            BitwardenApiClient::resolve_synced_cipher(&sync, &user_key, "name:app/database")
+        else {
+            unreachable!("shared item selected by name should fail explicitly");
+        };
+
+        assert!(matches!(
+            error,
+            BitwardenClientError::Api(BitwardenApiError::UnsupportedSharedItem)
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn name_lookup_skips_undecryptable_cipher_names() -> TestResult {
+        let user_key = AuthenticatedSymmetricKey::from_base64(KEY_B64)?;
+        let mut broken = serde_json::from_str::<EncryptedCipher>(LOGIN_CIPHER_JSON)?;
+        broken.id = "broken-cipher".to_string();
+        broken.name = Some("2.invalid".to_string());
+        let valid = serde_json::from_str::<EncryptedCipher>(LOGIN_CIPHER_JSON)?;
+        let sync = SyncResponse {
+            ciphers: vec![broken, valid],
+        };
+
+        let decrypted =
+            BitwardenApiClient::resolve_synced_cipher(&sync, &user_key, "name:app/database")?;
+
+        assert_eq!(decrypted.id, "cipher-login");
+        Ok(())
+    }
+
+    #[test]
     fn cached_vault_freshness_respects_ttl_and_token_expiry() -> TestResult {
         let now = Instant::now();
         let sync = SyncResponse { ciphers: vec![] };

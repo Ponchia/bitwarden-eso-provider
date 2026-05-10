@@ -25,6 +25,7 @@ Secrets Store CSI provider, and PushSecret support are later roadmap items.
 - Enforce optional provider-side selector policy with exact raw keys and raw key
   prefixes. Empty policy allows all keys visible to the configured account;
   configured policy denies every non-matching key with a redacted `403`.
+  Document that the policy is item-key scoped, not property scoped.
 - Fail selected shared organization items explicitly until organization-key
   decryption is implemented and live-tested.
 - Fail `attachment.` and `attachments.` properties explicitly until attachment
@@ -35,6 +36,8 @@ Secrets Store CSI provider, and PushSecret support are later roadmap items.
 - Provide examples for namespace-local `SecretStore`, warned
   `ClusterSecretStore`, common Kubernetes Secret types, Reloader, and
   NetworkPolicy starting points.
+- Provide optional Grafana dashboard and PrometheusRule examples for the
+  exported low-cardinality metrics.
 - Document the tested migration target policy:
   `creationPolicy: Orphan`, `deletionPolicy: Retain`, and template
   `mergePolicy: Merge`.
@@ -52,10 +55,14 @@ Secrets Store CSI provider, and PushSecret support are later roadmap items.
 Before making the repository public:
 
 - Run the full Rust and Helm checks from `AGENTS.md`.
+- Run the local security/quality gates used by CI: Gitleaks, Trivy, cargo-deny,
+  Checkov, Semgrep, CodeQL, and SonarQube where available.
 - Run `scripts/live-eso-smoke.sh` against Vaultwarden on the k3s cluster with
   selector policy enabled.
 - Run `scripts/live-eso-smoke.sh` against Bitwarden Cloud with selector policy
   enabled.
+- Verify the release workflow has a full pre-publish gate before publishing
+  images or attaching chart artifacts.
 - Confirm CI is green after pushing.
 - Keep the repo private until the branch is clean, pushed, smoke-tested, and
   release docs are coherent.

@@ -60,6 +60,10 @@
 - Configure `selectorPolicy.allowedKeys` or `selectorPolicy.allowedKeyPrefixes`
   on the provider Deployment when the credential can see more vault items than
   the namespace should consume.
+- Treat provider selector policy as item-key scoped. It does not enforce
+  per-property authorization inside an allowed item, so use exact `id:`
+  allowlists and separate provider credentials when different namespaces should
+  see different fields.
 - Treat `ClusterSecretStore` as a deliberate shared trust boundary. Kubernetes
   RBAC can control who may reference it, but the Bitwarden/Vaultwarden account
   and selector policy still define the data that can be read.

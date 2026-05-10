@@ -8,7 +8,8 @@ The default chart shape is intentionally small:
 - Namespace-scoped deployment.
 - No Kubernetes API RBAC; the webhook does not watch or write Kubernetes
   objects.
-- No dashboard by default.
+- No dashboard by default; optional Grafana and PrometheusRule examples live in
+  [`../../examples`](../../examples).
 - Existing Kubernetes Secret for credentials by default.
 - Startup, liveness, and readiness probes enabled by default.
 - Prometheus metrics exposed by the pod, with optional `ServiceMonitor`
