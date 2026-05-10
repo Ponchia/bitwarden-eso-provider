@@ -97,10 +97,11 @@ split-horizon DNS, set `BWESO_E2E_HOST_ALIAS_IP` and optionally
 `BWESO_E2E_HOST_ALIAS_HOSTNAME`; when omitted, the hostname is inferred from the
 single-origin URL.
 
-The normal path is to push to `main`, let GitHub Actions build and publish the
-commit-tagged image, then run the smoke test with the 12-character commit tag.
-The release workflow builds amd64 and arm64 on native runners and assembles the
-multi-arch manifest without QEMU emulation.
+The normal path is to push to `main`, let CI pass, then run the Release workflow
+manually against `main` when you need a commit-tagged image for live smoke
+testing. The release workflow builds amd64 and arm64 on native runners and
+assembles the multi-arch manifest without QEMU emulation. Regular CI only runs a
+fast Dockerfile check; it does not publish an image for every commit.
 
 If the GHCR package is private and was created manually before the workflow was
 in place, grant the repository `Write` access under the package settings'
