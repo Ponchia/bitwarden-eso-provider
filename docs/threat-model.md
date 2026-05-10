@@ -48,6 +48,9 @@
 - Use one dedicated Bitwarden/Vaultwarden user API key per namespace or trust
   boundary.
 - Use namespace-local `SecretStore` resources by default.
+- Put only the webhook bearer token in workload namespaces. Keep client ID,
+  client secret, and master password in the provider namespace or an equivalent
+  runtime secret boundary.
 - Configure `selectorPolicy.allowedKeys` or `selectorPolicy.allowedKeyPrefixes`
   on the provider Deployment when the credential can see more vault items than
   the namespace should consume.

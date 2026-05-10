@@ -65,10 +65,11 @@ by this project. Do not run live tests against a personal daily-use account.
 
 `scripts/live-eso-smoke.sh` deploys the Helm chart into a temporary namespace,
 creates a namespace-local `SecretStore`, syncs an `ExternalSecret`, verifies
-target Secret recreation, restarts the webhook Deployment, forces another sync,
-checks expected error cases for missing items/properties and selector-policy
-denial, and verifies `/livez`, `/readyz`, `/metrics`, successful/error/cache
-metrics, and metric redaction. It does not print decrypted values.
+target Secret recreation with identical data, restarts the webhook Deployment,
+forces another sync, checks expected error cases for missing items/properties
+and selector-policy denial, and verifies `/livez`, `/readyz`, `/metrics`,
+successful/error/cache metrics, and metric redaction. It does not print
+decrypted values.
 
 Required:
 
@@ -82,6 +83,10 @@ The smoke test installs the chart with `selectorPolicy.allowedKeys` containing
 only the selected item and one deliberate missing item. That proves allowed
 selectors still sync and disallowed selectors fail with redacted `403`
 responses.
+
+The smoke test uses `creationPolicy: Orphan`, `deletionPolicy: Retain`, and
+template `mergePolicy: Merge`, matching the recommended migration policy for
+long-lived Kubernetes Secrets.
 
 The chart leaves NetworkPolicy disabled by default because egress to
 Vaultwarden, Bitwarden Cloud, DNS, ESO, and Prometheus is cluster-specific. Set

@@ -35,6 +35,13 @@ Secrets Store CSI provider, and PushSecret support are later roadmap items.
 - Provide examples for namespace-local `SecretStore`, warned
   `ClusterSecretStore`, common Kubernetes Secret types, Reloader, and
   NetworkPolicy starting points.
+- Document the tested migration target policy:
+  `creationPolicy: Orphan`, `deletionPolicy: Retain`, and template
+  `mergePolicy: Merge`.
+- Recommend `field.<key>` for migrated Kubernetes keys to avoid collisions with
+  Bitwarden login fields such as `username` and `password`.
+- Document intentional empty target keys as ESO template data with
+  `mergePolicy: Merge`.
 - Keep chart NetworkPolicy opt-in for `v0.1.0`; backend, DNS, ESO, and
   Prometheus reachability is cluster-specific and a too-generic default can
   break first installs.

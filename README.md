@@ -151,8 +151,6 @@ kubectl -n bweso-system create secret generic bweso-credentials \
   --from-literal=client-secret='...' \
   --from-literal=master-password='...' \
   --from-literal=webhook-token='generate-a-long-random-token'
-kubectl -n bweso-system label secret bweso-credentials \
-  external-secrets.io/type=webhook
 
 helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
   --namespace bweso-system \
@@ -166,12 +164,32 @@ For Bitwarden Cloud, use `config.identityUrl=https://identity.bitwarden.com` and
 
 Then create an ESO `SecretStore` and `ExternalSecret` using the examples under
 [`deploy/eso`](deploy/eso). Prefer namespace-local `SecretStore` resources and
-`id:<item-id>` selectors. Use a broad `ClusterSecretStore` only when every
-namespace allowed to reference it is in the same trust boundary.
+`id:<item-id>` selectors. Namespace-local `SecretStore` resources need a
+same-namespace token-only Secret labeled `external-secrets.io/type=webhook`;
+do not copy the Bitwarden/Vaultwarden client secret and master password into
+workload namespaces:
+
+```bash
+kubectl -n app create secret generic bweso-webhook-auth \
+  --from-literal=webhook-token='same-webhook-token-as-above'
+kubectl -n app label secret bweso-webhook-auth external-secrets.io/type=webhook
+```
+
+For migrated Kubernetes Secret keys, use `field.<key>` properties so custom
+fields named `username` or `password` do not collide with Bitwarden login
+fields. Use a broad `ClusterSecretStore` only when every namespace allowed to
+reference it is in the same trust boundary.
+
+For target Secrets that should survive GitOps mistakes and be recreated after
+manual deletion, use ESO's `creationPolicy: Orphan`, `deletionPolicy: Retain`,
+and template `mergePolicy: Merge`; the examples use that policy. In particular,
+`creationPolicy: Merge` does not recreate a missing target Secret.
 
 Compatibility details are in [`docs/compatibility.md`](docs/compatibility.md).
 Operational metrics and probe details are in
 [`docs/operations/observability.md`](docs/operations/observability.md).
+Existing Kubernetes Secret migration guidance is in
+[`docs/operations/migration-runbook.md`](docs/operations/migration-runbook.md).
 Live smoke-test instructions are in [`docs/live-testing.md`](docs/live-testing.md).
 Public repository and contribution expectations are in
 [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md), and

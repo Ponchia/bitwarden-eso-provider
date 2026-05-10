@@ -68,6 +68,10 @@ The 1Password Operator comparison maps naturally to this split:
 - ESO `ExternalSecret` covers the "make/update a Secret" path.
 - ESO refresh intervals and force-sync annotations cover periodic and manual
   refresh.
+- ESO target policies cover migration semantics. For long-lived migrated
+  Kubernetes Secrets, use `creationPolicy: Orphan`, `deletionPolicy: Retain`,
+  and template `mergePolicy: Merge`; `creationPolicy: Merge` updates existing
+  Secrets but does not recreate a missing target.
 - Stakater Reloader, checksum annotations, or GitOps rollout annotations cover
   workload restarts after Secret changes.
 - This project covers the missing Bitwarden/Vaultwarden Password Manager

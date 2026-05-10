@@ -10,13 +10,15 @@ spec:
     kind: SecretStore
   target:
     name: app-config
-    creationPolicy: Owner
+    creationPolicy: Orphan
     deletionPolicy: Retain
+    template:
+      mergePolicy: Merge
   data:
     - secretKey: DATABASE_URL
       remoteRef:
         key: id:00000000-0000-0000-0000-000000000006
-        property: DATABASE_URL
+        property: field.DATABASE_URL
 ---
 apiVersion: apps/v1
 kind: Deployment

@@ -15,6 +15,13 @@ Required before calling a release generally usable:
 - Run `scripts/live-eso-smoke.sh` against real Vaultwarden and Bitwarden Cloud
   accounts with k3s or a kind cluster with ESO installed, with selector policy
   enabled.
+- Verify migration examples use `creationPolicy: Orphan`,
+  `deletionPolicy: Retain`, and template `mergePolicy: Merge`, and that a
+  deleted target Secret is recreated with identical data.
+- Verify examples use `field.<key>` for migrated Kubernetes keys that collide
+  with Bitwarden login field names such as `username` and `password`.
+- Verify intentional empty target keys are documented and rendered through
+  `target.template.data` with `mergePolicy: Merge`.
 - Publish the Helm chart artifact on the GitHub Release for the first
   pre-release.
 - Review the release image SBOM/provenance output.

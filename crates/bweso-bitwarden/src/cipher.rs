@@ -515,6 +515,45 @@ mod tests {
     }
 
     #[test]
+    fn field_prefix_selects_custom_fields_that_collide_with_login_names(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let decrypted = DecryptedCipher {
+            id: "cipher".to_string(),
+            cipher_type: 1,
+            organization_id: None,
+            name: Some("item-name".to_string()),
+            notes: None,
+            fields: vec![
+                DecryptedField {
+                    name: Some("username".to_string()),
+                    value: Some("custom-user".to_string()),
+                    field_type: Some(1),
+                },
+                DecryptedField {
+                    name: Some("password".to_string()),
+                    value: Some("custom-password".to_string()),
+                    field_type: Some(1),
+                },
+            ],
+            login: Some(DecryptedLogin {
+                username: Some("login-user".to_string()),
+                password: Some("login-password".to_string()),
+                totp: None,
+            }),
+            ssh_key: None,
+        };
+
+        assert_eq!(decrypted.extract_property("username")?, "login-user");
+        assert_eq!(decrypted.extract_property("password")?, "login-password");
+        assert_eq!(decrypted.extract_property("field.username")?, "custom-user");
+        assert_eq!(
+            decrypted.extract_property("field.password")?,
+            "custom-password"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn whole_cipher_document_omits_source_metadata() {
         let decrypted = DecryptedCipher {
             id: "cipher-login".to_string(),

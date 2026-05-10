@@ -407,8 +407,10 @@ spec:
     kind: SecretStore
   target:
     name: ${target_secret}
-    creationPolicy: Owner
-    deletionPolicy: Delete
+    creationPolicy: Orphan
+    deletionPolicy: Retain
+    template:
+      mergePolicy: Merge
   data:
     - secretKey: resolved
       remoteRef:
@@ -428,8 +430,10 @@ spec:
     kind: SecretStore
   target:
     name: bweso-missing-property-secret
-    creationPolicy: Owner
-    deletionPolicy: Delete
+    creationPolicy: Orphan
+    deletionPolicy: Retain
+    template:
+      mergePolicy: Merge
   data:
     - secretKey: resolved
       remoteRef:
@@ -449,8 +453,10 @@ spec:
     kind: SecretStore
   target:
     name: bweso-missing-item-secret
-    creationPolicy: Owner
-    deletionPolicy: Delete
+    creationPolicy: Orphan
+    deletionPolicy: Retain
+    template:
+      mergePolicy: Merge
   data:
     - secretKey: resolved
       remoteRef:
@@ -470,8 +476,10 @@ spec:
     kind: SecretStore
   target:
     name: bweso-policy-denied-secret
-    creationPolicy: Owner
-    deletionPolicy: Delete
+    creationPolicy: Orphan
+    deletionPolicy: Retain
+    template:
+      mergePolicy: Merge
   data:
     - secretKey: resolved
       remoteRef:
@@ -503,6 +511,9 @@ wait_secret_nonempty() {
 }
 
 wait_secret_nonempty "${target_secret}" resolved
+original_resolved="$("${kubectl_cmd[@]}" -n "${namespace}" get secret "${target_secret}" \
+  -o jsonpath='{.data.resolved}')"
+[[ -n "${original_resolved}" ]] || fail "Secret ${target_secret} had an empty resolved value before recreation"
 
 log "checking Secret recreation"
 "${kubectl_cmd[@]}" -n "${namespace}" delete secret "${target_secret}" >/dev/null
@@ -511,6 +522,9 @@ log "checking Secret recreation"
 "${kubectl_cmd[@]}" -n "${namespace}" wait externalsecret/bweso-smoke \
   --for=condition=Ready --timeout=180s >/dev/null
 wait_secret_nonempty "${target_secret}" resolved
+recreated_resolved="$("${kubectl_cmd[@]}" -n "${namespace}" get secret "${target_secret}" \
+  -o jsonpath='{.data.resolved}')"
+[[ "${recreated_resolved}" == "${original_resolved}" ]] || fail "recreated Secret data differed from the initial sync"
 
 log "checking webhook restart plus resync"
 "${kubectl_cmd[@]}" -n "${namespace}" rollout restart deployment -l "${selector}" >/dev/null

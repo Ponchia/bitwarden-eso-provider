@@ -23,6 +23,20 @@ The Helm chart leaves NetworkPolicy disabled by default. Enable
 DNS, ingress, Vaultwarden, ESO, and Prometheus paths in your cluster.
 
 Prefer one dedicated Bitwarden/Vaultwarden user and one namespace-local
-`SecretStore` per trust boundary. Configure the Helm chart's
-`selectorPolicy.allowedKeys` or `selectorPolicy.allowedKeyPrefixes` whenever the
-provider credentials can see more vault items than the namespace should read.
+`SecretStore` per trust boundary. Namespace-local `SecretStore` resources read
+webhook auth from a same-namespace token Secret such as `bweso-webhook-auth`;
+the provider runtime credentials in `bweso-system` should not be reused across
+namespaces as the ESO auth Secret. Configure the Helm chart's
+`selectorPolicy.allowedKeys` or `selectorPolicy.allowedKeyPrefixes` whenever
+the provider credentials can see more vault items than the namespace should
+read.
+
+The ExternalSecret examples use `creationPolicy: Orphan`,
+`deletionPolicy: Retain`, and template `mergePolicy: Merge`. That combination
+lets ESO recreate a missing target Secret, avoids deleting target Secrets when
+an ExternalSecret is removed, and prevents template-only keys from replacing
+provider-sourced keys.
+
+For migrated Kubernetes Secret keys, prefer `field.<key>` properties. Bare
+`username` and `password` mean Bitwarden login fields, while `field.username`
+and `field.password` mean custom fields with those names.

@@ -3,7 +3,7 @@
 Install External Secrets Operator first. This project provides the Bitwarden
 Password Manager and Vaultwarden resolver behind ESO's generic webhook provider.
 
-Create a namespace and credential Secret:
+Create a namespace and provider runtime credential Secret:
 
 ```bash
 kubectl create namespace bweso-system
@@ -12,13 +12,10 @@ kubectl -n bweso-system create secret generic bweso-credentials \
   --from-literal=client-secret='...' \
   --from-literal=master-password='...' \
   --from-literal=webhook-token='generate-a-long-random-token'
-kubectl -n bweso-system label secret bweso-credentials \
-  external-secrets.io/type=webhook
 ```
 
 The provider rejects `/v1/resolve` calls without `Authorization: Bearer
-<webhook-token>` by default. The label lets ESO's webhook provider expose the
-Secret data as template variables for the authorization header.
+<webhook-token>` by default.
 
 Install the webhook for Vaultwarden or single-origin self-hosted Bitwarden:
 
@@ -59,13 +56,29 @@ Bitwarden/Vaultwarden account itself is already scoped to the trust boundary.
 When either list is configured, every non-matching selector returns `403`
 without echoing the requested key.
 
-Point ESO at the webhook:
+Create a token-only webhook auth Secret in each namespace that uses a
+namespace-local `SecretStore`:
+
+```bash
+kubectl create namespace app
+kubectl -n app create secret generic bweso-webhook-auth \
+  --from-literal=webhook-token='same-webhook-token-as-above'
+kubectl -n app label secret bweso-webhook-auth \
+  external-secrets.io/type=webhook
+```
+
+ESO reads this same-namespace Secret to render the authorization header.
+Keeping it token-only avoids copying the Bitwarden/Vaultwarden client secret and
+master password into workload namespaces.
+
+Point ESO at the webhook from the workload namespace:
 
 ```yaml
 apiVersion: external-secrets.io/v1
 kind: SecretStore
 metadata:
   name: bitwarden
+  namespace: app
 spec:
   provider:
     webhook:
@@ -77,7 +90,7 @@ spec:
       secrets:
         - name: auth
           secretRef:
-            name: bweso-credentials
+            name: bweso-webhook-auth
       body: |
         {
           "remoteRef": {
@@ -93,10 +106,34 @@ spec:
 Then create `ExternalSecret` resources that select item IDs/names and
 properties. Prefer `id:<item-id>` selectors. `name:<item-name>` is supported for
 operator convenience, and bare selectors currently try ID first then item name
-for pre-release compatibility. Single-property responses always expose the
-selected value at `$.data.value`, so the `SecretStore` does not need JSONPath
-templating for field names. See [`../../deploy/eso`](../../deploy/eso) for
-Secret type, Reloader, `ClusterSecretStore`, and NetworkPolicy examples.
+for pre-release compatibility.
+
+For migrated Kubernetes Secret keys, prefer custom fields and request them with
+`field.<key>`. Plain `username` and `password` select Bitwarden login fields;
+`field.username` and `field.password` select custom fields named `username` and
+`password`.
+
+Use this target policy for migration-style Secrets that should survive
+ExternalSecret removal and be recreated if the target Secret is deleted:
+
+```yaml
+target:
+  name: app-database
+  creationPolicy: Orphan
+  deletionPolicy: Retain
+  template:
+    mergePolicy: Merge
+```
+
+`creationPolicy: Merge` updates existing Secrets but does not recreate a missing
+target Secret. `mergePolicy: Merge` is important whenever `target.template.data`
+contains static keys, such as an intentionally empty config file, because it
+keeps template data from replacing provider-sourced data.
+
+Single-property responses always expose the selected value at `$.data.value`, so
+the `SecretStore` does not need JSONPath templating for field names. See
+[`../../deploy/eso`](../../deploy/eso) for Secret type, Reloader,
+`ClusterSecretStore`, and NetworkPolicy examples.
 
 The chart configures startup, liveness, and readiness probes by default:
 
