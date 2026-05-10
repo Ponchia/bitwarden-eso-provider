@@ -5,6 +5,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      rustcrypto-kdf:
+        patterns:
+          - hkdf
+          - hmac
+          - pbkdf2
+          - sha2
 
   - package-ecosystem: github-actions
     directory: /

@@ -33,7 +33,8 @@ repository directory.
   disabled.
 - Squash commit message: pull request title and description.
 - Delete branch on merge: enabled.
-- Auto-merge: optional after required checks are stable.
+- Auto-merge: keep manual for normal pull requests. Dependabot patch-only PRs
+  may be merged automatically by the repository workflow after CI succeeds.
 - Allow update branch: enabled.
 - Topics: `bitwarden`, `vaultwarden`, `external-secrets`, `external-secrets-operator`,
   `kubernetes`, `rust`, `helm`, `secrets-management`.
@@ -69,3 +70,11 @@ Those can be added later once external contribution volume justifies them.
 Only maintainers should be able to push tags matching `v*`. Release tags publish
 multi-arch images and Helm chart artifacts, so tag protection should be enabled
 before the first public stable release.
+
+## Dependabot Policy
+
+Dependabot patch-only PRs are safe to merge automatically after CI succeeds.
+Minor and major updates stay manual because Rust `0.x` crates can contain API
+changes in semver-minor updates, and Docker/toolchain updates can change clippy
+behavior. Related RustCrypto KDF/MAC/hash crates are grouped so Dependabot does
+not open incompatible one-crate-at-a-time updates.

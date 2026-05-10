@@ -5,7 +5,7 @@ use std::str::FromStr;
 use aes::Aes256;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use cbc::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 use thiserror::Error;
 use zeroize::Zeroize;

@@ -30,19 +30,19 @@ anyhow = "1.0"
 async-trait = "0.1"
 aes = "0.8"
 argon2 = { version = "0.5", features = ["alloc", "zeroize", "std"], default-features = false }
-axum = { version = "0.7", features = ["macros"] }
+axum = { version = "0.8", features = ["macros"] }
 base64 = "0.22"
 cbc = { version = "0.1", features = ["block-padding"] }
 clap = { version = "4.5", features = ["derive", "env"] }
-hkdf = "0.12"
-hmac = "0.12"
+hkdf = "0.13"
+hmac = "0.13"
 http = "1.1"
-pbkdf2 = "0.12"
+pbkdf2 = "0.13"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 secrecy = "0.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sha2 = "0.10"
+sha2 = "0.11"
 thiserror = "2.0"
 tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "signal", "net", "sync", "time"] }
 tower = { version = "0.5", features = ["util"] }

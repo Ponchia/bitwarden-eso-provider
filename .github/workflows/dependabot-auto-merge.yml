@@ -1,0 +1,68 @@
+name: Dependabot Auto-Merge
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge-patch-update:
+    name: Merge Patch Update
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge safe Dependabot patch PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+        run: |
+          if [ -z "$PR_NUMBER" ]; then
+            echo "CI run is not attached to a pull request; skipping."
+            exit 0
+          fi
+
+          author="$(gh pr view "$PR_NUMBER" --repo "$REPOSITORY" --json author --jq '.author.login')"
+          if [ "$author" != "app/dependabot" ] && [ "$author" != "dependabot[bot]" ]; then
+            echo "Pull request #$PR_NUMBER was opened by $author, not Dependabot; skipping."
+            exit 0
+          fi
+
+          state="$(gh pr view "$PR_NUMBER" --repo "$REPOSITORY" --json state --jq '.state')"
+          if [ "$state" != "OPEN" ]; then
+            echo "Pull request #$PR_NUMBER is $state; skipping."
+            exit 0
+          fi
+
+          update_types="$(
+            gh pr view "$PR_NUMBER" --repo "$REPOSITORY" --json body --jq '.body' \
+              | sed -n 's/^[[:space:]]*update-type: //p' \
+              | sort -u
+          )"
+
+          if [ -z "$update_types" ]; then
+            echo "No Dependabot update-type metadata found; skipping."
+            exit 0
+          fi
+
+          disallowed="$(
+            printf '%s\n' "$update_types" \
+              | grep -v '^version-update:semver-patch$' || true
+          )"
+
+          if [ -n "$disallowed" ]; then
+            echo "Pull request #$PR_NUMBER is not patch-only; skipping."
+            printf '%s\n' "$disallowed"
+            exit 0
+          fi
+
+          gh pr merge "$PR_NUMBER" \
+            --repo "$REPOSITORY" \
+            --squash \
+            --delete-branch
