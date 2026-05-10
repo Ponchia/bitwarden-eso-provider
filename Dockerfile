@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 FROM rust:1.86-slim-bookworm AS builder
 
 WORKDIR /workspace
@@ -5,7 +7,11 @@ WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 
-RUN cargo build --locked --release -p bitwarden-eso-provider
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/workspace/target \
+    cargo build --locked --release -p bitwarden-eso-provider \
+    && cp /workspace/target/release/bitwarden-eso-provider /usr/local/bin/bitwarden-eso-provider
 
 FROM debian:bookworm-slim AS runtime
 
@@ -16,7 +22,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 65532 --home-dir /nonexistent --shell /usr/sbin/nologin bweso
 
-COPY --from=builder /workspace/target/release/bitwarden-eso-provider /usr/local/bin/bitwarden-eso-provider
+COPY --from=builder /usr/local/bin/bitwarden-eso-provider /usr/local/bin/bitwarden-eso-provider
 
 USER 65532:65532
 EXPOSE 8080

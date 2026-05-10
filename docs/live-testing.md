@@ -78,11 +78,17 @@ Required:
 - Live test credentials through the `BWESO_TEST_*` variables above, or the
   equivalent runtime `BWESO_*` variables.
 
-Example:
+The normal path is to push to `main`, let GitHub Actions build and publish the
+commit-tagged amd64 image, then run the smoke test with the 12-character commit
+tag. This avoids slow local `linux/amd64` Docker builds on Apple Silicon or
+other non-amd64 workstations.
+
+Example with a private GHCR image:
 
 ```bash
 export BWESO_E2E_KUBE_CONTEXT="<your-cluster-context>"
 export BWESO_E2E_IMAGE_TAG="$(git rev-parse --short=12 HEAD)"
+export BWESO_E2E_GHCR_TOKEN="$(gh auth token)"
 export BWESO_TEST_SINGLE_ORIGIN_URL="https://vaultwarden.example.com"
 export BWESO_TEST_CLIENT_ID="user.<uuid>"
 export BWESO_TEST_CLIENT_SECRET="..."
@@ -92,6 +98,7 @@ export BWESO_TEST_ALLOW_ANY_ITEM=true
 scripts/live-eso-smoke.sh
 ```
 
-For private GHCR images, set `BWESO_E2E_GHCR_TOKEN` and optionally
-`BWESO_E2E_GHCR_USER`; the script creates a temporary namespace-local
-image-pull Secret without printing the token.
+For public GHCR images, omit `BWESO_E2E_GHCR_TOKEN`. For private GHCR images,
+set `BWESO_E2E_GHCR_TOKEN` and optionally `BWESO_E2E_GHCR_USER`; the script
+creates a temporary namespace-local image-pull Secret without printing the
+token.
