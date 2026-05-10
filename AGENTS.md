@@ -1,12 +1,12 @@
 # Bitwarden ESO Provider Instructions
 
-This is a standalone Rust repository inside the local multi-repo workspace.
-Keep commits and generated artifacts local to this repository.
+This is a standalone Rust repository. Keep commits and generated artifacts local
+to this repository.
 
 ## Boundaries
 
-- Reference repositories live in
-  `../_docs/reference-map.mdbitwarden-eso-provider`.
+- Reference repositories, when checked out locally, belong outside this repo.
+  Keep research notes in documentation and do not vendor reference repositories.
 - Do not vendor or copy implementation code from reference repositories.
 - Treat Bitwarden and Vaultwarden source as reference material only unless a
   license review explicitly approves reuse.
@@ -18,9 +18,9 @@ Keep commits and generated artifacts local to this repository.
 Before handing off code changes, run:
 
 ```bash
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace --all-targets
+cargo fmt --all -- --check
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --locked --workspace --all-targets
 ```
 
 If dependencies change, also run:
@@ -35,7 +35,8 @@ cargo tree
 - `unsafe` is forbidden.
 - TLS verification is mandatory by default.
 - Secret values must use redacting or zeroizing wrappers where practical.
-- Logs may include item IDs, request IDs, namespace names, and key names, but not
-  values.
+- Logs, metrics, and public error responses must not include vault item IDs,
+  item names, requested property names, secret values, API tokens, master
+  passwords, or derived keys.
 - Deletion, rollout, and namespace-scoped behavior must be explicit in the
   Kubernetes-facing API.

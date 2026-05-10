@@ -265,7 +265,11 @@ impl BitwardenApiClient {
 
         if let Some(property) = selector.property {
             let value = cipher.extract_property(&property)?;
-            return Ok(SecretDocument::single(property.trim(), value));
+            let mut document = SecretDocument::single("value", value.clone());
+            if property != "value" {
+                document.data.insert(property, value);
+            }
+            return Ok(document);
         }
 
         Ok(cipher.to_secret_document()?)
@@ -821,6 +825,10 @@ mod tests {
             document.data.get("DATABASE_URL"),
             Some(&"postgres://app:secret@db:5432/app".to_string())
         );
+        assert_eq!(
+            document.data.get("value"),
+            Some(&"postgres://app:secret@db:5432/app".to_string())
+        );
         assert_eq!(counters.token_requests(), 1);
         assert_eq!(counters.sync_requests(), 1);
         Ok(())
@@ -839,6 +847,10 @@ mod tests {
 
         assert_eq!(
             document.data.get("DATABASE_URL"),
+            Some(&"postgres://app:secret@db:5432/app".to_string())
+        );
+        assert_eq!(
+            document.data.get("value"),
             Some(&"postgres://app:secret@db:5432/app".to_string())
         );
         Ok(())

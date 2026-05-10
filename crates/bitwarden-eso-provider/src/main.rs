@@ -265,8 +265,8 @@ async fn resolve(
 }
 
 fn provider_error(error: &BitwardenClientError) -> (StatusCode, Json<ErrorResponse>) {
-    let message = error.to_string();
-    let (status, _) = provider_status_and_kind(error);
+    let (status, error_kind) = provider_status_and_kind(error);
+    let message = public_error_message(error_kind).to_string();
 
     (status, Json(ErrorResponse { error: message }))
 }
@@ -306,9 +306,25 @@ fn provider_status_and_kind(error: &BitwardenClientError) -> (StatusCode, &'stat
         BitwardenClientError::Api(BitwardenApiError::InvalidBaseUrl)
         | BitwardenClientError::InvalidEndpoint { .. }
         | BitwardenClientError::InsecureEndpoint => (StatusCode::INTERNAL_SERVER_ERROR, "endpoint"),
-        BitwardenClientError::NotImplemented { .. } => {
-            (StatusCode::NOT_IMPLEMENTED, "not_implemented")
+        BitwardenClientError::UnsupportedVersionSelector => {
+            (StatusCode::BAD_REQUEST, "unsupported_version")
         }
+    }
+}
+
+fn public_error_message(error_kind: &str) -> &'static str {
+    match error_kind {
+        "validation" => "invalid resolve request",
+        "unsupported_version" => "remoteRef.version is not supported",
+        "not_found" => "requested Bitwarden item or property was not found",
+        "upstream_http" => "Bitwarden-compatible upstream request failed",
+        "upstream_status" => "Bitwarden-compatible upstream returned an error status",
+        "crypto" => "failed to decrypt selected Bitwarden item",
+        "key_derivation" => "failed to unlock Bitwarden vault key",
+        "kdf_parameters" => "Bitwarden-compatible KDF parameters are unsupported",
+        "sync_payload" => "Bitwarden-compatible sync payload is missing required unlock data",
+        "endpoint" => "provider endpoint configuration is invalid",
+        _ => "provider request failed",
     }
 }
 
@@ -350,7 +366,6 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use axum::body::{to_bytes, Body};
-    use bweso_bitwarden::NotImplementedProvider;
     use http::{header, Method, Request};
     use tower::ServiceExt;
 
@@ -367,6 +382,21 @@ mod tests {
             let data_key = selector.property.unwrap_or_else(|| "value".to_string());
 
             Ok(SecretDocument::single(data_key, "resolved-secret"))
+        }
+    }
+
+    struct MissingPropertyProvider;
+
+    #[async_trait]
+    impl BitwardenProvider for MissingPropertyProvider {
+        async fn resolve(
+            &self,
+            selector: BitwardenSelector,
+        ) -> Result<SecretDocument, BitwardenClientError> {
+            Err(CipherError::MissingProperty {
+                property: selector.property.unwrap_or_else(|| "unknown".to_string()),
+            }
+            .into())
         }
     }
 
@@ -591,18 +621,51 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn placeholder_provider_returns_not_implemented() -> TestResult {
-        let response = test_app(Arc::new(NotImplementedProvider))
+    async fn resolve_rejects_unsupported_remote_ref_version() -> TestResult {
+        let response = test_app(Arc::new(StaticProvider))
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
                     .uri("/v1/resolve")
                     .header(header::CONTENT_TYPE, "application/json")
-                    .body(Body::from(r#"{"remoteRef":{"key":"app/database"}}"#))?,
+                    .body(Body::from(
+                        r#"{"remoteRef":{"key":"app/database","property":"DATABASE_URL","version":"42"}}"#,
+                    ))?,
             )
             .await?;
 
-        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let body = std::str::from_utf8(&body)?;
+        assert!(body.contains("remoteRef.version is not supported"));
+        assert!(!body.contains("app/database"));
+        assert!(!body.contains("DATABASE_URL"));
+        assert!(!body.contains("42"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn resolve_error_body_redacts_selector() -> TestResult {
+        let response = test_app(Arc::new(MissingPropertyProvider))
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/v1/resolve")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        r#"{"remoteRef":{"key":"app/database","property":"DATABASE_URL"}}"#,
+                    ))?,
+            )
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let body = std::str::from_utf8(&body)?;
+        assert!(body.contains("requested Bitwarden item or property was not found"));
+        assert!(!body.contains("app/database"));
+        assert!(!body.contains("DATABASE_URL"));
         Ok(())
     }
 }

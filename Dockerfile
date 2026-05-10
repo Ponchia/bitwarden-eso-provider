@@ -5,7 +5,7 @@ WORKDIR /workspace
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 
-RUN cargo build --release -p bitwarden-eso-provider
+RUN cargo build --locked --release -p bitwarden-eso-provider
 
 FROM debian:bookworm-slim AS runtime
 

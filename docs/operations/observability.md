@@ -4,6 +4,10 @@ Bitwarden ESO Provider is a stateless HTTP webhook. It should be observable as a
 normal Kubernetes service without exposing vault item names, properties, secret
 values, API tokens, or derived keys.
 
+Public error responses are intentionally coarse for the same reason. ESO may
+copy webhook error bodies into `ExternalSecret` status or events, so selector
+values are not echoed back on failures.
+
 ## Health Endpoints
 
 The provider exposes dedicated probe endpoints:
@@ -42,7 +46,7 @@ Current series:
 Resolution labels are intentionally coarse. They expose classes like
 `validation`, `not_found`, `upstream_http`, `upstream_status`, `crypto`,
 `key_derivation`, `kdf_parameters`, `sync_payload`, `endpoint`, and
-`not_implemented`. They do not expose vault item IDs, item names, requested
+`unsupported_version`. They do not expose vault item IDs, item names, requested
 properties, usernames, URLs, or secret values.
 
 ## Prometheus Operator

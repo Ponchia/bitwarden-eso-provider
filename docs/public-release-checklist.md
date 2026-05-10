@@ -12,6 +12,8 @@ Required before calling a release generally usable:
 - Review logs for secret-value redaction under success and failure paths.
 - Review metrics for secret-value and vault-item metadata redaction under success
   and failure paths.
+- Review public HTTP error bodies for selector redaction because ESO can surface
+  provider errors in `ExternalSecret` status and events.
 - Verify `/livez`, `/readyz`, `/metrics`, default probes, and optional
   `ServiceMonitor` rendering.
 - Keep Helm chart schema validation in sync with supported values.

@@ -19,3 +19,4 @@
 /tarpaulin-report.html
 /junit.xml
 /.playwright-cli/
+/.semgrep/

@@ -28,10 +28,14 @@
 ## Security Requirements
 
 - TLS verification is mandatory by default.
-- The provider must not log secret values or decrypted vault content.
+- The provider must not expose vault item IDs, item names, requested properties,
+  secret values, decrypted vault content, API tokens, master passwords, or
+  derived keys through logs, metrics, or public error responses.
 - Vaultwarden/Bitwarden credentials must come from a Kubernetes Secret or external
   workload identity mechanism, not command-line args.
-- The default deployment must watch or serve only configured namespaces.
+- The default deployment must not need Kubernetes API RBAC. Namespace access is
+  controlled by ESO `SecretStore`/`ClusterSecretStore` placement, Kubernetes
+  RBAC, and optional NetworkPolicy.
 - A compromised application namespace must not allow arbitrary vault item
   reads unless its `SecretStore` credentials explicitly allow that.
 - Deletion must be controlled by ESO policies, not hidden provider behavior.

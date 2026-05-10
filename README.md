@@ -97,9 +97,9 @@ references                    Notes pointing to local reference checkouts
 ## Development
 
 ```bash
-cargo fmt --all
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace --all-targets
+cargo fmt --all -- --check
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --locked --workspace --all-targets
 ```
 
 Run locally against Vaultwarden or a self-hosted single-origin Bitwarden server:

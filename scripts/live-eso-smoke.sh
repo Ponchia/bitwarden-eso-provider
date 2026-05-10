@@ -174,7 +174,7 @@ fi
 item_key="$(jq -r '.key // empty' "${selector_file}")"
 property="$(jq -r '.property // empty' "${selector_file}")"
 [[ -n "${item_key}" ]] || fail "selector must contain .key"
-[[ -n "${property}" ]] || fail "selector must contain .property for ESO jsonPath extraction"
+[[ -n "${property}" ]] || fail "selector must contain .property for ESO value extraction"
 missing_property="__bweso_missing_property_$(date +%s)"
 missing_item="__bweso_missing_item_$(date +%s)"
 
@@ -329,7 +329,7 @@ spec:
           }
         }
       result:
-        jsonPath: "$.data.{{ .remoteRef.property }}"
+        jsonPath: "$.data.value"
       timeout: 10s
 ---
 apiVersion: external-secrets.io/v1

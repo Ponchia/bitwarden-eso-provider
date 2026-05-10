@@ -59,12 +59,14 @@ spec:
           }
         }
       result:
-        jsonPath: "$.data.{{ .remoteRef.property }}"
+        jsonPath: "$.data.value"
       timeout: 10s
 ```
 
 Then create `ExternalSecret` resources that select item IDs/names and
-properties. See [`../../deploy/eso`](../../deploy/eso) for examples.
+properties. Single-property responses always expose the selected value at
+`$.data.value`, so the `SecretStore` does not need JSONPath templating for field
+names. See [`../../deploy/eso`](../../deploy/eso) for examples.
 
 The chart configures startup, liveness, and readiness probes by default:
 

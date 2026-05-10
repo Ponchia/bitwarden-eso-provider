@@ -171,9 +171,25 @@ impl TryFrom<RemoteRef> for BitwardenSelector {
 
     fn try_from(remote_ref: RemoteRef) -> Result<Self, Self::Error> {
         require_non_empty(&remote_ref.key, "remote_ref.key")?;
+        if remote_ref
+            .version
+            .as_deref()
+            .is_some_and(|version| !version.trim().is_empty())
+        {
+            return Err(BitwardenClientError::UnsupportedVersionSelector);
+        }
+
+        let property = match remote_ref.property {
+            Some(property) => {
+                require_non_empty(&property, "remote_ref.property")?;
+                Some(property.trim().to_string())
+            }
+            None => None,
+        };
+
         Ok(Self {
-            key: remote_ref.key,
-            property: remote_ref.property,
+            key: remote_ref.key.trim().to_string(),
+            property,
         })
     }
 }
@@ -191,20 +207,6 @@ pub trait BitwardenProvider: Send + Sync {
         &self,
         selector: BitwardenSelector,
     ) -> Result<SecretDocument, BitwardenClientError>;
-}
-
-/// Placeholder provider used while the API and crypto implementation is designed.
-#[derive(Debug, Default)]
-pub struct NotImplementedProvider;
-
-#[async_trait]
-impl BitwardenProvider for NotImplementedProvider {
-    async fn resolve(
-        &self,
-        selector: BitwardenSelector,
-    ) -> Result<SecretDocument, BitwardenClientError> {
-        Err(BitwardenClientError::NotImplemented { key: selector.key })
-    }
 }
 
 /// Errors returned by the Bitwarden-compatible client boundary.
@@ -235,12 +237,10 @@ pub enum BitwardenClientError {
     /// Endpoint does not meet transport security requirements.
     #[error("Bitwarden-compatible endpoint must use HTTPS except for localhost development")]
     InsecureEndpoint,
-    /// Requested operation is not implemented yet.
-    #[error("Bitwarden-compatible resolution is not implemented for key {key}")]
-    NotImplemented {
-        /// Requested key.
-        key: String,
-    },
+    /// ESO requested an item version or revision, which this provider cannot
+    /// resolve safely yet.
+    #[error("remote_ref.version is not supported by this provider")]
+    UnsupportedVersionSelector,
 }
 
 #[cfg(test)]
@@ -324,5 +324,47 @@ mod tests {
         };
 
         assert!(matches!(err, BitwardenClientError::Validation(_)));
+    }
+
+    #[test]
+    fn selector_rejects_empty_properties() {
+        let Err(err) = BitwardenSelector::try_from(RemoteRef {
+            key: "app/database".to_string(),
+            property: Some(" ".to_string()),
+            version: None,
+        }) else {
+            unreachable!("empty selector property should fail validation");
+        };
+
+        assert!(matches!(err, BitwardenClientError::Validation(_)));
+    }
+
+    #[test]
+    fn selector_rejects_unsupported_versions() {
+        let Err(err) = BitwardenSelector::try_from(RemoteRef {
+            key: "app/database".to_string(),
+            property: Some("DATABASE_URL".to_string()),
+            version: Some("42".to_string()),
+        }) else {
+            unreachable!("version selectors should fail until implemented");
+        };
+
+        assert!(matches!(
+            err,
+            BitwardenClientError::UnsupportedVersionSelector
+        ));
+    }
+
+    #[test]
+    fn selector_normalizes_property_whitespace() -> Result<(), Box<dyn std::error::Error>> {
+        let selector = BitwardenSelector::try_from(RemoteRef {
+            key: " app/database ".to_string(),
+            property: Some(" DATABASE_URL ".to_string()),
+            version: None,
+        })?;
+
+        assert_eq!(selector.key, "app/database");
+        assert_eq!(selector.property.as_deref(), Some("DATABASE_URL"));
+        Ok(())
     }
 }
