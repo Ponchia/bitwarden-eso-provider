@@ -73,24 +73,9 @@ enum LiveSelectorConfig {
 impl LiveConfig {
     fn from_env() -> Result<Option<Self>, Box<dyn std::error::Error>> {
         let endpoint = match (
-            optional_env_any(&[
-                "BWESO_TEST_SINGLE_ORIGIN_URL",
-                "BWESO_SINGLE_ORIGIN_URL",
-                "VWSO_TEST_VAULTWARDEN_URL",
-                "VWSO_VAULTWARDEN_URL",
-            ]),
-            optional_env_any(&[
-                "BWESO_TEST_IDENTITY_URL",
-                "BWESO_IDENTITY_URL",
-                "VWSO_TEST_IDENTITY_URL",
-                "VWSO_IDENTITY_URL",
-            ]),
-            optional_env_any(&[
-                "BWESO_TEST_API_URL",
-                "BWESO_API_URL",
-                "VWSO_TEST_API_URL",
-                "VWSO_API_URL",
-            ]),
+            optional_env_any(&["BWESO_TEST_SINGLE_ORIGIN_URL", "BWESO_SINGLE_ORIGIN_URL"]),
+            optional_env_any(&["BWESO_TEST_IDENTITY_URL", "BWESO_IDENTITY_URL"]),
+            optional_env_any(&["BWESO_TEST_API_URL", "BWESO_API_URL"]),
         ) {
             (Some(single_origin_url), None, None) => {
                 LiveEndpointConfig::SingleOrigin { single_origin_url }
@@ -107,34 +92,23 @@ impl LiveConfig {
             }
         };
 
-        let Some(client_id) = optional_env_any(&[
-            "BWESO_TEST_CLIENT_ID",
-            "BWESO_CLIENT_ID",
-            "VWSO_TEST_CLIENT_ID",
-            "VWSO_CLIENT_ID",
-        ]) else {
+        let Some(client_id) = optional_env_any(&["BWESO_TEST_CLIENT_ID", "BWESO_CLIENT_ID"]) else {
             return Ok(None);
         };
-        let Some(client_secret) = optional_env_any(&[
-            "BWESO_TEST_CLIENT_SECRET",
-            "BWESO_CLIENT_SECRET",
-            "VWSO_TEST_CLIENT_SECRET",
-            "VWSO_CLIENT_SECRET",
-        ]) else {
+        let Some(client_secret) =
+            optional_env_any(&["BWESO_TEST_CLIENT_SECRET", "BWESO_CLIENT_SECRET"])
+        else {
             return Ok(None);
         };
-        let Some(master_password) = optional_env_any(&[
-            "BWESO_TEST_MASTER_PASSWORD",
-            "BWESO_MASTER_PASSWORD",
-            "VWSO_TEST_MASTER_PASSWORD",
-            "VWSO_MASTER_PASSWORD",
-        ]) else {
+        let Some(master_password) =
+            optional_env_any(&["BWESO_TEST_MASTER_PASSWORD", "BWESO_MASTER_PASSWORD"])
+        else {
             return Ok(None);
         };
-        let property = optional_env_any(&["BWESO_TEST_PROPERTY", "VWSO_TEST_PROPERTY"]);
+        let property = optional_env("BWESO_TEST_PROPERTY");
         let selector = match (
-            optional_env_any(&["BWESO_TEST_ITEM_KEY", "VWSO_TEST_ITEM_KEY"]),
-            truthy_env_any(&["BWESO_TEST_ALLOW_ANY_ITEM", "VWSO_TEST_ALLOW_ANY_ITEM"]),
+            optional_env("BWESO_TEST_ITEM_KEY"),
+            truthy_env("BWESO_TEST_ALLOW_ANY_ITEM"),
         ) {
             (Some(key), _) => LiveSelectorConfig::Explicit { key, property },
             (None, true) => LiveSelectorConfig::FirstExtractable { property },
@@ -147,10 +121,7 @@ impl LiveConfig {
             client_secret,
             master_password,
             selector,
-            selector_output_path: optional_env_any(&[
-                "BWESO_TEST_SELECTOR_OUTPUT",
-                "VWSO_TEST_SELECTOR_OUTPUT",
-            ]),
+            selector_output_path: optional_env("BWESO_TEST_SELECTOR_OUTPUT"),
         }))
     }
 }
@@ -254,8 +225,8 @@ fn optional_env_any(names: &[&str]) -> Option<String> {
     names.iter().find_map(|name| optional_env(name))
 }
 
-fn truthy_env_any(names: &[&str]) -> bool {
-    optional_env_any(names).is_some_and(|value| {
+fn truthy_env(name: &str) -> bool {
+    optional_env(name).is_some_and(|value| {
         matches!(
             value.to_ascii_lowercase().as_str(),
             "1" | "true" | "yes" | "y" | "on"

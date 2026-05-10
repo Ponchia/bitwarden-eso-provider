@@ -58,9 +58,6 @@ The live smoke test can be aimed at either layout:
 - `BWESO_TEST_IDENTITY_URL` plus `BWESO_TEST_API_URL` for Bitwarden Cloud or
   explicit split deployments.
 
-Legacy `VWSO_*` and `VWSO_TEST_*` names are still accepted as aliases during
-the rename transition.
-
 Live verification status:
 
 - Vaultwarden single-origin: verified against a real k3s cluster with External

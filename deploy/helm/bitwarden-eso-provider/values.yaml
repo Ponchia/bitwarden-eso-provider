@@ -41,8 +41,6 @@ config:
   # Set singleOriginUrl for Vaultwarden or self-hosted Bitwarden deployments
   # where identity and API routes share one origin.
   singleOriginUrl: ""
-  # Deprecated alias for singleOriginUrl. Kept for pre-release compatibility.
-  vaultwardenUrl: ""
   # Or set both identityUrl and apiUrl for Bitwarden Cloud/split endpoints.
   identityUrl: ""
   apiUrl: ""

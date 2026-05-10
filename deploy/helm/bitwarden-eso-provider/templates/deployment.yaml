@@ -40,10 +40,9 @@ spec:
               containerPort: 8080
               protocol: TCP
           env:
-            {{- $singleOriginUrl := default .Values.config.vaultwardenUrl .Values.config.singleOriginUrl }}
-            {{- if $singleOriginUrl }}
+            {{- if .Values.config.singleOriginUrl }}
             - name: BWESO_SINGLE_ORIGIN_URL
-              value: {{ $singleOriginUrl | quote }}
+              value: {{ .Values.config.singleOriginUrl | quote }}
             {{- end }}
             {{- if .Values.config.identityUrl }}
             - name: BWESO_IDENTITY_URL

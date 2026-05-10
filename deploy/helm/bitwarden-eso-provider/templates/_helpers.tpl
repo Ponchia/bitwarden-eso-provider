@@ -72,14 +72,10 @@ Credentials Secret name.
 Validate endpoint and credential configuration.
 */}}
 {{- define "bweso.validate" -}}
-{{- $singleOriginUrl := default .Values.config.vaultwardenUrl .Values.config.singleOriginUrl -}}
-{{- if and .Values.config.singleOriginUrl .Values.config.vaultwardenUrl (ne .Values.config.singleOriginUrl .Values.config.vaultwardenUrl) -}}
-{{- fail "configure only one of config.singleOriginUrl or deprecated config.vaultwardenUrl" -}}
-{{- end -}}
-{{- if and $singleOriginUrl (or .Values.config.identityUrl .Values.config.apiUrl) -}}
+{{- if and .Values.config.singleOriginUrl (or .Values.config.identityUrl .Values.config.apiUrl) -}}
 {{- fail "configure either config.singleOriginUrl or both config.identityUrl and config.apiUrl, not both endpoint modes" -}}
 {{- end -}}
-{{- if and (not $singleOriginUrl) (not (and .Values.config.identityUrl .Values.config.apiUrl)) -}}
+{{- if and (not .Values.config.singleOriginUrl) (not (and .Values.config.identityUrl .Values.config.apiUrl)) -}}
 {{- fail "configure config.singleOriginUrl, or both config.identityUrl and config.apiUrl" -}}
 {{- end -}}
 {{- if and .Values.credentials.create .Values.credentials.existingSecret.name -}}

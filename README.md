@@ -98,9 +98,6 @@ BWESO_CACHE_TTL_SECONDS=60 \
 cargo run -p bitwarden-eso-provider -- --listen 127.0.0.1:8080
 ```
 
-Legacy `VWSO_*` environment variables are accepted as aliases for now, but new
-deployments should use `BWESO_*`.
-
 ## Helm Install
 
 ```bash

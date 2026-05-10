@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use std::{env, net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::{bail, Context};
 use axum::{
@@ -26,7 +26,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 struct Args {
     #[arg(long, env = "BWESO_LISTEN", default_value = "0.0.0.0:8080")]
     listen: SocketAddr,
-    #[arg(long, env = "BWESO_SINGLE_ORIGIN_URL", alias = "vaultwarden-url")]
+    #[arg(long, env = "BWESO_SINGLE_ORIGIN_URL")]
     single_origin_url: Option<String>,
     #[arg(long, env = "BWESO_IDENTITY_URL")]
     identity_url: Option<String>,
@@ -76,7 +76,6 @@ struct ErrorResponse {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     init_tracing();
-    install_legacy_env_aliases();
     let args = Args::parse();
     let listen = args.listen;
 
@@ -140,30 +139,6 @@ fn endpoints_from_args(args: &Args) -> anyhow::Result<BitwardenEndpoints> {
         _ => bail!(
             "configure BWESO_SINGLE_ORIGIN_URL for single-origin Vaultwarden/self-hosted Bitwarden, or both BWESO_IDENTITY_URL and BWESO_API_URL for split Bitwarden endpoints"
         ),
-    }
-}
-
-fn install_legacy_env_aliases() {
-    const ALIASES: &[(&str, &str)] = &[
-        ("VWSO_LISTEN", "BWESO_LISTEN"),
-        ("VWSO_VAULTWARDEN_URL", "BWESO_SINGLE_ORIGIN_URL"),
-        ("VWSO_IDENTITY_URL", "BWESO_IDENTITY_URL"),
-        ("VWSO_API_URL", "BWESO_API_URL"),
-        ("VWSO_CLIENT_ID", "BWESO_CLIENT_ID"),
-        ("VWSO_CLIENT_SECRET", "BWESO_CLIENT_SECRET"),
-        ("VWSO_MASTER_PASSWORD", "BWESO_MASTER_PASSWORD"),
-        ("VWSO_DEVICE_IDENTIFIER", "BWESO_DEVICE_IDENTIFIER"),
-        ("VWSO_DEVICE_NAME", "BWESO_DEVICE_NAME"),
-        ("VWSO_DEVICE_TYPE", "BWESO_DEVICE_TYPE"),
-        ("VWSO_CACHE_TTL_SECONDS", "BWESO_CACHE_TTL_SECONDS"),
-    ];
-
-    for (legacy, current) in ALIASES {
-        if env::var(current).is_err() {
-            if let Ok(value) = env::var(legacy) {
-                env::set_var(current, value);
-            }
-        }
     }
 }
 

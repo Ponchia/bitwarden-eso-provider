@@ -10,6 +10,7 @@ Required before calling a release generally usable:
 - Review the release image SBOM/provenance output.
 - Add local kind integration coverage with a disposable Vaultwarden fixture.
 - Review logs for secret-value redaction under success and failure paths.
+- Keep Helm chart schema validation in sync with supported values.
 - Decide whether unsupported organization/shared item decryption should be
   hard-fail documented behavior or implemented before `v1.0.0`.
 
@@ -19,4 +20,3 @@ Nice to have before `v1.0.0`:
 - Reloader example manifests.
 - NetworkPolicy examples for in-cluster Vaultwarden and public Bitwarden Cloud
   egress.
-- Chart schema validation.

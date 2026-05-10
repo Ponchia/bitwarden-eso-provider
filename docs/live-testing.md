@@ -61,9 +61,6 @@ contain decrypted values.
 Use a dedicated Vaultwarden or Bitwarden user with only the fixture items needed
 by this project. Do not run live tests against a personal daily-use account.
 
-Legacy `VWSO_TEST_*` and runtime `VWSO_*` variables are still accepted as
-aliases during the rename transition.
-
 ## Live ESO Smoke Test
 
 `scripts/live-eso-smoke.sh` deploys the Helm chart into a temporary namespace,

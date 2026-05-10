@@ -47,7 +47,7 @@ first_env() {
 
 kubectl_cmd=(kubectl)
 helm_cmd=(helm)
-kube_context="$(first_env BWESO_E2E_KUBE_CONTEXT VWSO_E2E_KUBE_CONTEXT KUBE_CONTEXT || true)"
+kube_context="$(first_env BWESO_E2E_KUBE_CONTEXT KUBE_CONTEXT || true)"
 if [[ -n "${kube_context}" ]]; then
   kubectl_cmd+=(--context "${kube_context}")
   helm_cmd+=(--kube-context "${kube_context}")
@@ -58,20 +58,20 @@ require_cmd helm
 require_cmd jq
 require_cmd cargo
 
-namespace="$(first_env BWESO_E2E_NAMESPACE VWSO_E2E_NAMESPACE || true)"
+namespace="$(first_env BWESO_E2E_NAMESPACE || true)"
 namespace="${namespace:-bweso-live-smoke}"
-release="$(first_env BWESO_E2E_RELEASE VWSO_E2E_RELEASE || true)"
+release="$(first_env BWESO_E2E_RELEASE || true)"
 release="${release:-bweso}"
-image_repository="$(first_env BWESO_E2E_IMAGE_REPOSITORY VWSO_E2E_IMAGE_REPOSITORY || true)"
+image_repository="$(first_env BWESO_E2E_IMAGE_REPOSITORY || true)"
 image_repository="${image_repository:-ghcr.io/ponchia/bitwarden-eso-provider}"
-image_tag="$(first_env BWESO_E2E_IMAGE_TAG VWSO_E2E_IMAGE_TAG || true)"
-credentials_secret="$(first_env BWESO_E2E_CREDENTIALS_SECRET VWSO_E2E_CREDENTIALS_SECRET || true)"
+image_tag="$(first_env BWESO_E2E_IMAGE_TAG || true)"
+credentials_secret="$(first_env BWESO_E2E_CREDENTIALS_SECRET || true)"
 credentials_secret="${credentials_secret:-bweso-live-credentials}"
-pull_secret="$(first_env BWESO_E2E_IMAGE_PULL_SECRET VWSO_E2E_IMAGE_PULL_SECRET || true)"
+pull_secret="$(first_env BWESO_E2E_IMAGE_PULL_SECRET || true)"
 target_secret="bweso-smoke-secret"
-selector_file="$(first_env BWESO_E2E_SELECTOR_FILE VWSO_E2E_SELECTOR_FILE || true)"
+selector_file="$(first_env BWESO_E2E_SELECTOR_FILE || true)"
 cleanup_namespace=true
-if truthy "$(first_env BWESO_E2E_KEEP_NAMESPACE VWSO_E2E_KEEP_NAMESPACE || true)"; then
+if truthy "$(first_env BWESO_E2E_KEEP_NAMESPACE || true)"; then
   cleanup_namespace=false
 fi
 
@@ -79,18 +79,16 @@ fi
 
 single_origin_url="$(
   first_env \
-    BWESO_TEST_SINGLE_ORIGIN_URL BWESO_SINGLE_ORIGIN_URL \
-    VWSO_TEST_VAULTWARDEN_URL VWSO_VAULTWARDEN_URL || true
+    BWESO_TEST_SINGLE_ORIGIN_URL BWESO_SINGLE_ORIGIN_URL || true
 )"
 identity_url="$(
   first_env \
-    BWESO_TEST_IDENTITY_URL BWESO_IDENTITY_URL \
-    VWSO_TEST_IDENTITY_URL VWSO_IDENTITY_URL || true
+    BWESO_TEST_IDENTITY_URL BWESO_IDENTITY_URL || true
 )"
-api_url="$(first_env BWESO_TEST_API_URL BWESO_API_URL VWSO_TEST_API_URL VWSO_API_URL || true)"
-client_id="$(first_env BWESO_TEST_CLIENT_ID BWESO_CLIENT_ID VWSO_TEST_CLIENT_ID VWSO_CLIENT_ID || true)"
-client_secret="$(first_env BWESO_TEST_CLIENT_SECRET BWESO_CLIENT_SECRET VWSO_TEST_CLIENT_SECRET VWSO_CLIENT_SECRET || true)"
-master_password="$(first_env BWESO_TEST_MASTER_PASSWORD BWESO_MASTER_PASSWORD VWSO_TEST_MASTER_PASSWORD VWSO_MASTER_PASSWORD || true)"
+api_url="$(first_env BWESO_TEST_API_URL BWESO_API_URL || true)"
+client_id="$(first_env BWESO_TEST_CLIENT_ID BWESO_CLIENT_ID || true)"
+client_secret="$(first_env BWESO_TEST_CLIENT_SECRET BWESO_CLIENT_SECRET || true)"
+master_password="$(first_env BWESO_TEST_MASTER_PASSWORD BWESO_MASTER_PASSWORD || true)"
 
 if [[ -n "${single_origin_url}" && ( -n "${identity_url}" || -n "${api_url}" ) ]]; then
   fail "use either BWESO_TEST_SINGLE_ORIGIN_URL/BWESO_SINGLE_ORIGIN_URL or split identity/api URLs, not both"
@@ -124,8 +122,8 @@ trap cleanup EXIT
 
 selector_from_env() {
   local key property
-  key="$(first_env BWESO_TEST_ITEM_KEY VWSO_TEST_ITEM_KEY || true)"
-  property="$(first_env BWESO_TEST_PROPERTY VWSO_TEST_PROPERTY || true)"
+  key="$(first_env BWESO_TEST_ITEM_KEY || true)"
+  property="$(first_env BWESO_TEST_PROPERTY || true)"
   [[ -n "${key}" && -n "${property}" ]] || return 1
   jq -n --arg key "${key}" --arg property "${property}" \
     '{key: $key, property: $property}' >"${tmp_dir}/selector.json"
@@ -146,7 +144,7 @@ selector_from_live_test() {
     unset BWESO_TEST_SINGLE_ORIGIN_URL
   fi
 
-  if [[ -z "$(first_env BWESO_TEST_ITEM_KEY VWSO_TEST_ITEM_KEY || true)" ]]; then
+  if [[ -z "$(first_env BWESO_TEST_ITEM_KEY || true)" ]]; then
     export BWESO_TEST_ALLOW_ANY_ITEM="${BWESO_TEST_ALLOW_ANY_ITEM:-true}"
   fi
 
@@ -169,10 +167,10 @@ property="$(jq -r '.property // empty' "${selector_file}")"
 log "creating namespace ${namespace}"
 "${kubectl_cmd[@]}" create namespace "${namespace}" --dry-run=client -o yaml | "${kubectl_cmd[@]}" apply -f - >/dev/null
 
-ghcr_token="$(first_env BWESO_E2E_GHCR_TOKEN VWSO_E2E_GHCR_TOKEN || true)"
+ghcr_token="$(first_env BWESO_E2E_GHCR_TOKEN || true)"
 if [[ -n "${ghcr_token}" ]]; then
   pull_secret="${pull_secret:-ghcr-pull}"
-  ghcr_user="$(first_env BWESO_E2E_GHCR_USER VWSO_E2E_GHCR_USER GITHUB_ACTOR || true)"
+  ghcr_user="$(first_env BWESO_E2E_GHCR_USER GITHUB_ACTOR || true)"
   ghcr_user="${ghcr_user:-bweso-smoke}"
   auth="$(printf '%s:%s' "${ghcr_user}" "${ghcr_token}" | base64 | tr -d '\n')"
   cat >"${tmp_dir}/dockerconfigjson" <<EOF
