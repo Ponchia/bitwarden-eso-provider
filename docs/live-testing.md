@@ -98,9 +98,9 @@ split-horizon DNS, set `BWESO_E2E_HOST_ALIAS_IP` and optionally
 single-origin URL.
 
 The normal path is to push to `main`, let GitHub Actions build and publish the
-commit-tagged amd64 image, then run the smoke test with the 12-character commit
-tag. This avoids slow local `linux/amd64` Docker builds on Apple Silicon or
-other non-amd64 workstations.
+commit-tagged image, then run the smoke test with the 12-character commit tag.
+The release workflow builds amd64 and arm64 on native runners and assembles the
+multi-arch manifest without QEMU emulation.
 
 If the GHCR package is private and was created manually before the workflow was
 in place, grant the repository `Write` access under the package settings'
