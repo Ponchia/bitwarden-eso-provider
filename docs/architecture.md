@@ -46,6 +46,30 @@ expect: `SecretStore`, `ExternalSecret`, refresh intervals, creation policies,
 deletion policies, status conditions, and templating. Reusing it avoids a
 premature CRD and gives the project a narrow, testable first milestone.
 
+An ESO webhook provider is better than a full native operator while the desired
+behavior is "read a Password Manager item and materialize a Kubernetes Secret."
+It lets ESO own the Kubernetes lifecycle and lets this project own only the
+Bitwarden-compatible auth, sync, decrypt, and field extraction boundary. That is
+also easier to test because the webhook can be exercised without a Kubernetes
+controller-runtime reconcile loop.
+
+A native operator becomes better only if this project needs first-class
+Vaultwarden-specific Kubernetes APIs. Examples would be custom CRDs for vault
+item discovery, project/team mapping, controller-owned rollout policies, or
+status that cannot be represented cleanly through ESO `ExternalSecret`
+conditions. Until then, a standalone operator would mostly duplicate mature ESO
+behavior and require broader RBAC.
+
+The 1Password Operator comparison maps naturally to this split:
+
+- ESO `ExternalSecret` covers the "make/update a Secret" path.
+- ESO refresh intervals and force-sync annotations cover periodic and manual
+  refresh.
+- Stakater Reloader, checksum annotations, or GitOps rollout annotations cover
+  workload restarts after Secret changes.
+- This project covers the missing Vaultwarden/Bitwarden Password Manager
+  provider implementation.
+
 ## Later Options
 
 - Native External Secrets Operator provider if the webhook API becomes too

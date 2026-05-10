@@ -1,0 +1,82 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/ponchia/vaultwarden-secrets-operator
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: false
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+config:
+  # Set vaultwardenUrl for single-origin Vaultwarden/self-hosted Bitwarden.
+  vaultwardenUrl: ""
+  # Or set both identityUrl and apiUrl for Bitwarden Cloud/split endpoints.
+  identityUrl: ""
+  apiUrl: ""
+  cacheTtlSeconds: 60
+  deviceIdentifier: vaultwarden-secrets-operator
+  deviceName: Vaultwarden Secrets Operator
+  deviceType: 22
+
+credentials:
+  # Prefer an existing Secret. Required keys default to:
+  # client-id, client-secret, master-password.
+  existingSecret:
+    name: ""
+    keys:
+      clientId: client-id
+      clientSecret: client-secret
+      masterPassword: master-password
+  # create is useful for local smoke tests, but avoid committing secret values
+  # in Helm values files.
+  create: false
+  clientId: ""
+  clientSecret: ""
+  masterPassword: ""
+
+logging:
+  rustLog: info,tower_http=info
+
+extraEnv: []
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+networkPolicy:
+  enabled: false
+  annotations: {}
+  ingress: []
+  egress: []

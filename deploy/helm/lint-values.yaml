@@ -1,0 +1,6 @@
+config:
+  vaultwardenUrl: https://vaultwarden.example.com
+
+credentials:
+  existingSecret:
+    name: vwso-credentials

@@ -60,3 +60,37 @@ contain decrypted values.
 Do not run this test against a personal daily-use account. Use a dedicated
 Vaultwarden or Bitwarden user with only the fixture items needed by this
 project.
+
+## Live ESO Smoke Test
+
+`scripts/live-eso-smoke.sh` deploys the Helm chart into a temporary namespace,
+creates a namespace-local `SecretStore`, syncs an `ExternalSecret`, verifies
+target Secret recreation, restarts the webhook Deployment, forces another sync,
+and checks expected error cases for missing items/properties. It does not print
+decrypted values.
+
+Required:
+
+- `kubectl`, `helm`, `jq`, and `cargo`.
+- External Secrets Operator already installed in the target cluster.
+- A pushed image tag for the webhook.
+- Live test credentials through the `VWSO_TEST_*` variables above, or the
+  equivalent runtime `VWSO_*` variables.
+
+Example:
+
+```bash
+export VWSO_E2E_KUBE_CONTEXT=<your-cluster-context>
+export VWSO_E2E_IMAGE_TAG="$(git rev-parse --short=12 HEAD)"
+export VWSO_TEST_VAULTWARDEN_URL="https://vaultwarden.example.com"
+export VWSO_TEST_CLIENT_ID="user.<uuid>"
+export VWSO_TEST_CLIENT_SECRET="..."
+export VWSO_TEST_MASTER_PASSWORD="..."
+export VWSO_TEST_ALLOW_ANY_ITEM=true
+
+scripts/live-eso-smoke.sh
+```
+
+For private GHCR images, set `VWSO_E2E_GHCR_TOKEN` and optionally
+`VWSO_E2E_GHCR_USER`; the script creates a temporary namespace-local
+image-pull Secret without printing the token.

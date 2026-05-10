@@ -29,9 +29,11 @@ Initial notes on authenticated encrypted string handling live in
 
 - Implement `/v1/resolve` contract.
 - Add SecretStore and ExternalSecret examples.
-- Add Helm chart with namespace-scoped default RBAC.
+- Add Helm chart with namespace-scoped default deployment and no Kubernetes API
+  permissions.
 - Add Docker image and SBOM generation.
 - Add integration tests with local Vaultwarden and kind.
+- Add repeatable live k3s/ESO smoke script.
 
 ## Phase 3: Kubernetes Ergonomics
 

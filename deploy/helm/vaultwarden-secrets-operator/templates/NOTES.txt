@@ -1,0 +1,7 @@
+The Vaultwarden Secrets Operator ESO webhook is installed.
+
+Create an External Secrets Operator SecretStore that points to:
+
+  http://{{ include "vwso.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/v1/resolve
+
+Example SecretStore and ExternalSecret manifests are in deploy/eso.

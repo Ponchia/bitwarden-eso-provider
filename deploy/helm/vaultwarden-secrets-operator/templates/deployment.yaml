@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vwso.fullname" . }}
+  labels:
+    {{- include "vwso.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "vwso.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "vwso.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "vwso.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: vwso-eso-webhook
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            {{- if .Values.config.vaultwardenUrl }}
+            - name: VWSO_VAULTWARDEN_URL
+              value: {{ .Values.config.vaultwardenUrl | quote }}
+            {{- end }}
+            {{- if .Values.config.identityUrl }}
+            - name: VWSO_IDENTITY_URL
+              value: {{ .Values.config.identityUrl | quote }}
+            {{- end }}
+            {{- if .Values.config.apiUrl }}
+            - name: VWSO_API_URL
+              value: {{ .Values.config.apiUrl | quote }}
+            {{- end }}
+            - name: VWSO_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vwso.credentialsSecretName" . }}
+                  key: {{ .Values.credentials.existingSecret.keys.clientId | quote }}
+            - name: VWSO_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vwso.credentialsSecretName" . }}
+                  key: {{ .Values.credentials.existingSecret.keys.clientSecret | quote }}
+            - name: VWSO_MASTER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vwso.credentialsSecretName" . }}
+                  key: {{ .Values.credentials.existingSecret.keys.masterPassword | quote }}
+            - name: VWSO_CACHE_TTL_SECONDS
+              value: {{ .Values.config.cacheTtlSeconds | quote }}
+            - name: VWSO_DEVICE_IDENTIFIER
+              value: {{ .Values.config.deviceIdentifier | quote }}
+            - name: VWSO_DEVICE_NAME
+              value: {{ .Values.config.deviceName | quote }}
+            - name: VWSO_DEVICE_TYPE
+              value: {{ .Values.config.deviceType | quote }}
+            - name: RUST_LOG
+              value: {{ .Values.logging.rustLog | quote }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

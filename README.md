@@ -17,7 +17,11 @@ Bitwarden-compatible Password Manager APIs and resolving encrypted vault items.
 
 ## Status
 
-Early implementation. Do not deploy yet.
+Experimental implementation. The core Vaultwarden + External Secrets Operator
+path has been live-tested against a k3s cluster, including initial sync, forced
+refresh, target Secret recreation, webhook restart, and expected not-found
+errors. Treat the public API and chart values as pre-1.0 until the first tagged
+release.
 
 The current repository contains:
 
@@ -31,11 +35,14 @@ The current repository contains:
 - In-memory sync caching with explicit TTL and single-flight refresh behavior.
 - Architecture, threat-model, and reference notes.
 - Example External Secrets Operator manifests.
+- A Helm chart for deploying the webhook.
+- A repeatable live ESO smoke-test script.
 - CI scaffolding for formatting, clippy, unit tests, fake-server tests, and an
   opt-in live Bitwarden-compatible smoke test.
 
-The webhook binary still needs deployment manifests, redacted metrics, and live
-Vaultwarden/Bitwarden/kind integration tests before it should be deployed.
+Bitwarden Cloud split endpoints are covered by fake-server tests, but still need
+a live Bitwarden Cloud validation account before this project should claim full
+cloud compatibility.
 
 ## Design Principles
 
@@ -94,6 +101,24 @@ cargo run -p vwso-eso-webhook -- --listen 127.0.0.1:8080
 
 Compatibility details are in [`docs/compatibility.md`](docs/compatibility.md).
 Live smoke-test instructions are in [`docs/live-testing.md`](docs/live-testing.md).
+
+Install the webhook with Helm:
+
+```bash
+kubectl create namespace vwso-system
+kubectl -n vwso-system create secret generic vwso-credentials \
+  --from-literal=client-id='user.<uuid>' \
+  --from-literal=client-secret='...' \
+  --from-literal=master-password='...'
+
+helm upgrade --install vwso ./deploy/helm/vaultwarden-secrets-operator \
+  --namespace vwso-system \
+  --set-string config.vaultwardenUrl='https://vaultwarden.example.com' \
+  --set-string credentials.existingSecret.name=vwso-credentials
+```
+
+Then create an ESO `SecretStore` and `ExternalSecret` using the examples under
+[`deploy/eso`](deploy/eso).
 
 ## License
 

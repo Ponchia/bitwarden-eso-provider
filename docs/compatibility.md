@@ -58,6 +58,13 @@ The live smoke test can be aimed at either layout:
 - `VWSO_TEST_IDENTITY_URL` plus `VWSO_TEST_API_URL` for Bitwarden Cloud or
   explicit split deployments.
 
+Live verification status:
+
+- Vaultwarden single-origin: verified against a real k3s cluster with External
+  Secrets Operator on 2026-05-09.
+- Bitwarden Cloud split endpoints: fake-server covered, still pending a live
+  validation account.
+
 ## Current Scope
 
 Implemented:

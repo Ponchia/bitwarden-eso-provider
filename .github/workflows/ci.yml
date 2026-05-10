@@ -33,3 +33,29 @@ jobs:
 
       - name: Test
         run: cargo test --workspace --all-targets
+
+  helm:
+    name: Helm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint chart
+        run: helm lint deploy/helm/vaultwarden-secrets-operator -f deploy/helm/lint-values.yaml
+
+      - name: Render chart
+        run: helm template vwso deploy/helm/vaultwarden-secrets-operator -f deploy/helm/lint-values.yaml --namespace vwso-system
+
+  docker:
+    name: Docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build image
+        run: docker build .
