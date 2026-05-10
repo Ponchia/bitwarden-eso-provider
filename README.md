@@ -46,6 +46,31 @@ tagged release.
 - Helm chart, ESO manifests, live smoke test script, architecture notes, threat
   model, and release checklist.
 
+## Why This Exists
+
+Bitwarden has two different product surfaces:
+
+- Password Manager vault items, which are also the surface implemented by
+  Vaultwarden through the Bitwarden-compatible client API.
+- Secrets Manager (`bws`) secrets, projects, machine accounts, and access
+  tokens.
+
+If your application secrets already live in Bitwarden Secrets Manager, use the
+official Bitwarden or External Secrets Operator integration. This project exists
+for the other case: teams that already keep operational secrets in Bitwarden
+Password Manager or Vaultwarden and want Kubernetes to consume them through
+standard ESO-managed Kubernetes Secrets.
+
+| Option | Secret Source | Kubernetes Model | Vaultwarden Fit | Restart Story | Best Fit |
+| --- | --- | --- | --- | --- | --- |
+| **Bitwarden ESO Provider** | Bitwarden Password Manager or Vaultwarden vault items | ESO generic webhook; ESO owns `SecretStore`, `ExternalSecret`, refresh, status, templating, and target `Secret` lifecycle | Yes. Single-origin Vaultwarden and Bitwarden Cloud split endpoints are live-tested | Provider is stateless; use ESO force-sync plus app reload, Stakater Reloader, checksum annotations, or GitOps rollouts | Reuse existing Password Manager or Vaultwarden items without adopting a second secrets backend |
+| [Bitwarden Secrets Manager Kubernetes Operator](https://bitwarden.com/help/secrets-manager-kubernetes-operator/) | Bitwarden Secrets Manager secrets and projects | First-party `BitwardenSecret` CRD and controller sync to Kubernetes `Secret` | No. It targets Secrets Manager, not the Password Manager client API implemented by Vaultwarden | Operator syncs on its refresh interval; workload restart remains an explicit deployment concern | Best official Bitwarden path when secrets can live in Secrets Manager |
+| [ESO Bitwarden Secrets Manager provider](https://external-secrets.io/latest/provider/bitwarden-secrets-manager/) | Bitwarden Secrets Manager | Native ESO provider plus the Bitwarden SDK server | No. It targets Secrets Manager, not Password Manager or Vaultwarden items | ESO owns refresh and target `Secret` behavior; the SDK server and TLS/certificate setup are additional operational pieces | Best ESO-native path for `bws` users |
+| [1Password Kubernetes Operator](https://developer.1password.com/docs/k8s/operator/) | 1Password items | First-party operator using 1Password Connect or service-account authentication | No | Supports automatic deployment restarts when linked 1Password items change | Mature option when the organization already uses 1Password |
+| ESO built-in providers for HashiCorp Vault, cloud secret managers, Infisical, and similar systems | Purpose-built infrastructure secret backends | Native ESO providers | No | ESO plus backend-specific audit, identity, rotation, or dynamic-secret behavior | Best for teams adopting a dedicated infrastructure secrets platform |
+| [Secrets Store CSI Driver](https://secrets-store-csi-driver.sigs.k8s.io/getting-started/usage) | External secret stores with CSI providers | CSI volume mounts with optional Kubernetes `Secret` sync | Not for this Password Manager/Vaultwarden flow | Updates mounts and synced Secrets; it does not restart application pods | Best when applications should read secrets from mounted files |
+| `bw` CLI scripts or ad-hoc webhooks | Bitwarden Password Manager, sometimes Vaultwarden | Script, sidecar, cron, or custom webhook | Often possible | Depends entirely on the script | Fine for personal automation; weaker for a public, tested, observable Kubernetes integration |
+
 ## Design Principles
 
 - Kubernetes manifests declare what is synced. Vault item metadata never decides
