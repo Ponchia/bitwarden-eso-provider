@@ -1,4 +1,4 @@
-# Vaultwarden Secrets Operator Instructions
+# Bitwarden ESO Provider Instructions
 
 This is a standalone Rust repository inside the local multi-repo workspace.
 Keep commits and generated artifacts local to this repository.
@@ -8,10 +8,10 @@ Keep commits and generated artifacts local to this repository.
 - Reference repositories live in
   `../_docs/reference-map.mdbitwarden-eso-provider`.
 - Do not vendor or copy implementation code from reference repositories.
-- Treat Vaultwarden and Bitwarden source as reference material only unless a
+- Treat Bitwarden and Vaultwarden source as reference material only unless a
   license review explicitly approves reuse.
-- Do not put real Vaultwarden credentials, master passwords, API tokens, or
-  Kubernetes kubeconfigs in this repository.
+- Do not put real Bitwarden/Vaultwarden credentials, master passwords, API
+  tokens, or Kubernetes kubeconfigs in this repository.
 
 ## Checks
 
@@ -39,4 +39,3 @@ cargo tree
   values.
 - Deletion, rollout, and namespace-scoped behavior must be explicit in the
   Kubernetes-facing API.
-

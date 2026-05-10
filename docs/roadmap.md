@@ -2,7 +2,7 @@
 
 ## Phase 0: Design Spike
 
-- Map Vaultwarden auth and cipher endpoints.
+- Map Bitwarden/Vaultwarden auth and cipher endpoints.
 - Map Bitwarden client-side decryption flow.
 - Document 1Password Operator use cases and restart semantics.
 - Validate ESO webhook request and response contracts.
@@ -13,12 +13,12 @@ Initial notes on authenticated encrypted string handling live in
 
 ## Phase 1: Local Provider
 
-- Implement Vaultwarden login with user API key. Initial fake-server coverage is
-  in place.
+- Implement Bitwarden-compatible login with user API key. Initial fake-server
+  coverage is in place.
 - Implement vault unlock and item decryption with tests from deterministic
   fixtures.
 - Add field extraction for login, secure note, SSH key, and custom fields.
-- Wire runtime configuration into `vwso-eso-webhook`.
+- Wire runtime configuration into `bitwarden-eso-provider`.
 - Add cache with explicit TTL and single-flight refresh.
 - Add split Bitwarden Cloud endpoint support with fake-server coverage.
 - Add redacted metrics.

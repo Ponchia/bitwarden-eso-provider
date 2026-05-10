@@ -1,14 +1,14 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "vwso.name" -}}
+{{- define "bweso.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*
 Create a default fully qualified app name.
 */}}
-{{- define "vwso.fullname" -}}
+{{- define "bweso.fullname" -}}
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
@@ -24,16 +24,16 @@ Create a default fully qualified app name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "vwso.chart" -}}
+{{- define "bweso.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*
 Common labels.
 */}}
-{{- define "vwso.labels" -}}
-helm.sh/chart: {{ include "vwso.chart" . }}
-{{ include "vwso.selectorLabels" . }}
+{{- define "bweso.labels" -}}
+helm.sh/chart: {{ include "bweso.chart" . }}
+{{ include "bweso.selectorLabels" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
@@ -41,17 +41,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels.
 */}}
-{{- define "vwso.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "vwso.name" . }}
+{{- define "bweso.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "bweso.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{/*
 Service account name.
 */}}
-{{- define "vwso.serviceAccountName" -}}
+{{- define "bweso.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create -}}
-{{- default (include "vwso.fullname" .) .Values.serviceAccount.name -}}
+{{- default (include "bweso.fullname" .) .Values.serviceAccount.name -}}
 {{- else -}}
 {{- default "default" .Values.serviceAccount.name -}}
 {{- end -}}
@@ -60,23 +60,27 @@ Service account name.
 {{/*
 Credentials Secret name.
 */}}
-{{- define "vwso.credentialsSecretName" -}}
+{{- define "bweso.credentialsSecretName" -}}
 {{- if .Values.credentials.existingSecret.name -}}
 {{- .Values.credentials.existingSecret.name -}}
 {{- else -}}
-{{- printf "%s-credentials" (include "vwso.fullname" .) -}}
+{{- printf "%s-credentials" (include "bweso.fullname" .) -}}
 {{- end -}}
 {{- end -}}
 
 {{/*
 Validate endpoint and credential configuration.
 */}}
-{{- define "vwso.validate" -}}
-{{- if and .Values.config.vaultwardenUrl (or .Values.config.identityUrl .Values.config.apiUrl) -}}
-{{- fail "configure either config.vaultwardenUrl or both config.identityUrl and config.apiUrl, not both endpoint modes" -}}
+{{- define "bweso.validate" -}}
+{{- $singleOriginUrl := default .Values.config.vaultwardenUrl .Values.config.singleOriginUrl -}}
+{{- if and .Values.config.singleOriginUrl .Values.config.vaultwardenUrl (ne .Values.config.singleOriginUrl .Values.config.vaultwardenUrl) -}}
+{{- fail "configure only one of config.singleOriginUrl or deprecated config.vaultwardenUrl" -}}
 {{- end -}}
-{{- if and (not .Values.config.vaultwardenUrl) (not (and .Values.config.identityUrl .Values.config.apiUrl)) -}}
-{{- fail "configure config.vaultwardenUrl, or both config.identityUrl and config.apiUrl" -}}
+{{- if and $singleOriginUrl (or .Values.config.identityUrl .Values.config.apiUrl) -}}
+{{- fail "configure either config.singleOriginUrl or both config.identityUrl and config.apiUrl, not both endpoint modes" -}}
+{{- end -}}
+{{- if and (not $singleOriginUrl) (not (and .Values.config.identityUrl .Values.config.apiUrl)) -}}
+{{- fail "configure config.singleOriginUrl, or both config.identityUrl and config.apiUrl" -}}
 {{- end -}}
 {{- if and .Values.credentials.create .Values.credentials.existingSecret.name -}}
 {{- fail "configure either credentials.create or credentials.existingSecret.name, not both" -}}

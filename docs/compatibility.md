@@ -11,7 +11,7 @@ Two endpoint layouts are supported.
 Single-origin servers use one URL and derive the API roots from it:
 
 ```bash
-VWSO_VAULTWARDEN_URL="https://vaultwarden.example.com"
+BWESO_SINGLE_ORIGIN_URL="https://vaultwarden.example.com"
 ```
 
 Requests are built as:
@@ -25,15 +25,15 @@ when exposed through one origin.
 Split endpoint servers use explicit identity and API URLs:
 
 ```bash
-VWSO_IDENTITY_URL="https://identity.bitwarden.com"
-VWSO_API_URL="https://api.bitwarden.com"
+BWESO_IDENTITY_URL="https://identity.bitwarden.com"
+BWESO_API_URL="https://api.bitwarden.com"
 ```
 
 For Bitwarden EU, use:
 
 ```bash
-VWSO_IDENTITY_URL="https://identity.bitwarden.eu"
-VWSO_API_URL="https://api.bitwarden.eu"
+BWESO_IDENTITY_URL="https://identity.bitwarden.eu"
+BWESO_API_URL="https://api.bitwarden.eu"
 ```
 
 The provider appends only the endpoint-specific paths in split mode:
@@ -54,9 +54,12 @@ The automated suite has fake-server coverage for both endpoint layouts:
 
 The live smoke test can be aimed at either layout:
 
-- `VWSO_TEST_VAULTWARDEN_URL` for single-origin servers.
-- `VWSO_TEST_IDENTITY_URL` plus `VWSO_TEST_API_URL` for Bitwarden Cloud or
+- `BWESO_TEST_SINGLE_ORIGIN_URL` for single-origin servers.
+- `BWESO_TEST_IDENTITY_URL` plus `BWESO_TEST_API_URL` for Bitwarden Cloud or
   explicit split deployments.
+
+Legacy `VWSO_*` and `VWSO_TEST_*` names are still accepted as aliases during
+the rename transition.
 
 Live verification status:
 

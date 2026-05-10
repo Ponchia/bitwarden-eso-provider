@@ -1,10 +1,10 @@
 use std::{env, fs, time::Duration};
 
-use vwso_core::SecretDocument;
-use vwso_vaultwarden::{
-    VaultwardenApiClient, VaultwardenAuth, VaultwardenCacheConfig, VaultwardenDevice,
-    VaultwardenEndpoint, VaultwardenEndpoints, VaultwardenProvider, VaultwardenSelector,
+use bweso_bitwarden::{
+    BitwardenApiClient, BitwardenAuth, BitwardenCacheConfig, BitwardenDevice, BitwardenEndpoint,
+    BitwardenEndpoints, BitwardenProvider, BitwardenSelector,
 };
+use bweso_core::SecretDocument;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -12,29 +12,29 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 async fn resolves_configured_live_bitwarden_compatible_secret() -> TestResult {
     let Some(config) = LiveConfig::from_env()? else {
         eprintln!(
-            "skipping live Bitwarden-compatible test; set VWSO_TEST_VAULTWARDEN_URL \
-             or both VWSO_TEST_IDENTITY_URL and VWSO_TEST_API_URL, plus \
-             VWSO_TEST_CLIENT_ID, VWSO_TEST_CLIENT_SECRET, VWSO_TEST_MASTER_PASSWORD, \
-             and VWSO_TEST_ITEM_KEY or VWSO_TEST_ALLOW_ANY_ITEM=true"
+            "skipping live Bitwarden-compatible test; set BWESO_TEST_SINGLE_ORIGIN_URL \
+             or both BWESO_TEST_IDENTITY_URL and BWESO_TEST_API_URL, plus \
+             BWESO_TEST_CLIENT_ID, BWESO_TEST_CLIENT_SECRET, BWESO_TEST_MASTER_PASSWORD, \
+             and BWESO_TEST_ITEM_KEY or BWESO_TEST_ALLOW_ANY_ITEM=true"
         );
         return Ok(());
     };
 
     let endpoints = config.endpoint.endpoints()?;
-    let auth = VaultwardenAuth {
+    let auth = BitwardenAuth {
         client_id: config.client_id,
         client_secret: config.client_secret.into(),
         master_password: config.master_password.into(),
     };
-    let client = VaultwardenApiClient::with_endpoints_device_and_cache(
+    let client = BitwardenApiClient::with_endpoints_device_and_cache(
         endpoints,
         auth,
-        VaultwardenDevice::default(),
-        VaultwardenCacheConfig::new(Duration::from_secs(1)),
+        BitwardenDevice::default(),
+        BitwardenCacheConfig::new(Duration::from_secs(1)),
     )?;
 
     let selector = match config.selector {
-        LiveSelectorConfig::Explicit { key, property } => VaultwardenSelector { key, property },
+        LiveSelectorConfig::Explicit { key, property } => BitwardenSelector { key, property },
         LiveSelectorConfig::FirstExtractable { property } => {
             first_extractable_selector(&client, property).await?
         }
@@ -73,12 +73,27 @@ enum LiveSelectorConfig {
 impl LiveConfig {
     fn from_env() -> Result<Option<Self>, Box<dyn std::error::Error>> {
         let endpoint = match (
-            optional_env("VWSO_TEST_VAULTWARDEN_URL"),
-            optional_env("VWSO_TEST_IDENTITY_URL"),
-            optional_env("VWSO_TEST_API_URL"),
+            optional_env_any(&[
+                "BWESO_TEST_SINGLE_ORIGIN_URL",
+                "BWESO_SINGLE_ORIGIN_URL",
+                "VWSO_TEST_VAULTWARDEN_URL",
+                "VWSO_VAULTWARDEN_URL",
+            ]),
+            optional_env_any(&[
+                "BWESO_TEST_IDENTITY_URL",
+                "BWESO_IDENTITY_URL",
+                "VWSO_TEST_IDENTITY_URL",
+                "VWSO_IDENTITY_URL",
+            ]),
+            optional_env_any(&[
+                "BWESO_TEST_API_URL",
+                "BWESO_API_URL",
+                "VWSO_TEST_API_URL",
+                "VWSO_API_URL",
+            ]),
         ) {
-            (Some(vaultwarden_url), None, None) => {
-                LiveEndpointConfig::SingleOrigin { vaultwarden_url }
+            (Some(single_origin_url), None, None) => {
+                LiveEndpointConfig::SingleOrigin { single_origin_url }
             }
             (None, Some(identity_url), Some(api_url)) => LiveEndpointConfig::Split {
                 identity_url,
@@ -87,24 +102,39 @@ impl LiveConfig {
             (None, None, None) => return Ok(None),
             _ => {
                 return Err(config_error(
-                    "live test endpoint config must use VWSO_TEST_VAULTWARDEN_URL or both VWSO_TEST_IDENTITY_URL and VWSO_TEST_API_URL",
+                    "live test endpoint config must use BWESO_TEST_SINGLE_ORIGIN_URL or both BWESO_TEST_IDENTITY_URL and BWESO_TEST_API_URL",
                 ));
             }
         };
 
-        let Some(client_id) = required_env("VWSO_TEST_CLIENT_ID") else {
+        let Some(client_id) = optional_env_any(&[
+            "BWESO_TEST_CLIENT_ID",
+            "BWESO_CLIENT_ID",
+            "VWSO_TEST_CLIENT_ID",
+            "VWSO_CLIENT_ID",
+        ]) else {
             return Ok(None);
         };
-        let Some(client_secret) = required_env("VWSO_TEST_CLIENT_SECRET") else {
+        let Some(client_secret) = optional_env_any(&[
+            "BWESO_TEST_CLIENT_SECRET",
+            "BWESO_CLIENT_SECRET",
+            "VWSO_TEST_CLIENT_SECRET",
+            "VWSO_CLIENT_SECRET",
+        ]) else {
             return Ok(None);
         };
-        let Some(master_password) = required_env("VWSO_TEST_MASTER_PASSWORD") else {
+        let Some(master_password) = optional_env_any(&[
+            "BWESO_TEST_MASTER_PASSWORD",
+            "BWESO_MASTER_PASSWORD",
+            "VWSO_TEST_MASTER_PASSWORD",
+            "VWSO_MASTER_PASSWORD",
+        ]) else {
             return Ok(None);
         };
-        let property = optional_env("VWSO_TEST_PROPERTY");
+        let property = optional_env_any(&["BWESO_TEST_PROPERTY", "VWSO_TEST_PROPERTY"]);
         let selector = match (
-            optional_env("VWSO_TEST_ITEM_KEY"),
-            truthy_env("VWSO_TEST_ALLOW_ANY_ITEM"),
+            optional_env_any(&["BWESO_TEST_ITEM_KEY", "VWSO_TEST_ITEM_KEY"]),
+            truthy_env_any(&["BWESO_TEST_ALLOW_ANY_ITEM", "VWSO_TEST_ALLOW_ANY_ITEM"]),
         ) {
             (Some(key), _) => LiveSelectorConfig::Explicit { key, property },
             (None, true) => LiveSelectorConfig::FirstExtractable { property },
@@ -117,15 +147,18 @@ impl LiveConfig {
             client_secret,
             master_password,
             selector,
-            selector_output_path: optional_env("VWSO_TEST_SELECTOR_OUTPUT"),
+            selector_output_path: optional_env_any(&[
+                "BWESO_TEST_SELECTOR_OUTPUT",
+                "VWSO_TEST_SELECTOR_OUTPUT",
+            ]),
         }))
     }
 }
 
 async fn first_extractable_selector(
-    client: &VaultwardenApiClient,
+    client: &BitwardenApiClient,
     property: Option<String>,
-) -> Result<VaultwardenSelector, Box<dyn std::error::Error>> {
+) -> Result<BitwardenSelector, Box<dyn std::error::Error>> {
     let session = client.login_with_api_key().await?;
     let sync = client.sync(&session).await?;
     let mut decrypted_count = 0usize;
@@ -139,13 +172,13 @@ async fn first_extractable_selector(
 
         if let Some(property) = property.as_deref() {
             if decrypted.extract_property(property).is_ok() {
-                return Ok(VaultwardenSelector {
+                return Ok(BitwardenSelector {
                     key: cipher.id.clone(),
                     property: Some(property.to_string()),
                 });
             }
         } else if let Ok(document) = decrypted.to_secret_document() {
-            return Ok(VaultwardenSelector {
+            return Ok(BitwardenSelector {
                 key: cipher.id.clone(),
                 property: document.data.keys().next().cloned(),
             });
@@ -175,7 +208,7 @@ fn assert_document_contains_expected_data(document: &SecretDocument, property: O
     }
 }
 
-fn write_selector_output(path: &str, selector: &VaultwardenSelector) -> TestResult {
+fn write_selector_output(path: &str, selector: &BitwardenSelector) -> TestResult {
     let output = serde_json::json!({
         "key": &selector.key,
         "property": &selector.property,
@@ -186,7 +219,7 @@ fn write_selector_output(path: &str, selector: &VaultwardenSelector) -> TestResu
 
 enum LiveEndpointConfig {
     SingleOrigin {
-        vaultwarden_url: String,
+        single_origin_url: String,
     },
     Split {
         identity_url: String,
@@ -195,16 +228,16 @@ enum LiveEndpointConfig {
 }
 
 impl LiveEndpointConfig {
-    fn endpoints(&self) -> Result<VaultwardenEndpoints, vwso_vaultwarden::VaultwardenClientError> {
+    fn endpoints(&self) -> Result<BitwardenEndpoints, bweso_bitwarden::BitwardenClientError> {
         match self {
-            Self::SingleOrigin { vaultwarden_url } => {
-                let endpoint = VaultwardenEndpoint::parse(vaultwarden_url)?;
-                Ok(VaultwardenEndpoints::from_single_origin(endpoint))
+            Self::SingleOrigin { single_origin_url } => {
+                let endpoint = BitwardenEndpoint::parse(single_origin_url)?;
+                Ok(BitwardenEndpoints::from_single_origin(endpoint))
             }
             Self::Split {
                 identity_url,
                 api_url,
-            } => VaultwardenEndpoints::parse_split(identity_url, api_url),
+            } => BitwardenEndpoints::parse_split(identity_url, api_url),
         }
     }
 }
@@ -217,12 +250,12 @@ fn dynamic_test_error(message: String) -> Box<dyn std::error::Error> {
     std::io::Error::new(std::io::ErrorKind::InvalidInput, message).into()
 }
 
-fn required_env(name: &str) -> Option<String> {
-    optional_env(name)
+fn optional_env_any(names: &[&str]) -> Option<String> {
+    names.iter().find_map(|name| optional_env(name))
 }
 
-fn truthy_env(name: &str) -> bool {
-    optional_env(name).is_some_and(|value| {
+fn truthy_env_any(names: &[&str]) -> bool {
+    optional_env_any(names).is_some_and(|value| {
         matches!(
             value.to_ascii_lowercase().as_str(),
             "1" | "true" | "yes" | "y" | "on"

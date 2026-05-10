@@ -2,9 +2,9 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "vwso.fullname" . }}
+  name: {{ include "bweso.fullname" . }}
   labels:
-    {{- include "vwso.labels" . | nindent 4 }}
+    {{- include "bweso.labels" . | nindent 4 }}
   {{- with .Values.networkPolicy.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -12,7 +12,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      {{- include "vwso.selectorLabels" . | nindent 6 }}
+      {{- include "bweso.selectorLabels" . | nindent 6 }}
   policyTypes:
     - Ingress
     - Egress

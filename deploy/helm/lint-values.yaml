@@ -1,6 +1,6 @@
 config:
-  vaultwardenUrl: https://vaultwarden.example.com
+  singleOriginUrl: https://vaultwarden.example.com
 
 credentials:
   existingSecret:
-    name: vwso-credentials
+    name: bweso-credentials

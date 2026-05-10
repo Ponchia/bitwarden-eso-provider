@@ -2,14 +2,14 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CHART_DIR="${ROOT_DIR}/deploy/helm/vaultwarden-secrets-operator"
+CHART_DIR="${ROOT_DIR}/deploy/helm/bitwarden-eso-provider"
 
 log() {
-  printf '[vwso-smoke] %s\n' "$*"
+  printf '[bweso-smoke] %s\n' "$*"
 }
 
 fail() {
-  printf '[vwso-smoke] error: %s\n' "$*" >&2
+  printf '[bweso-smoke] error: %s\n' "$*" >&2
   exit 1
 }
 
@@ -33,9 +33,10 @@ env_or_empty() {
   printf '%s' "${!name:-}"
 }
 
-first_nonempty() {
-  local value
-  for value in "$@"; do
+first_env() {
+  local name value
+  for name in "$@"; do
+    value="$(env_or_empty "${name}")"
     if [[ -n "${value}" ]]; then
       printf '%s' "${value}"
       return 0
@@ -46,7 +47,7 @@ first_nonempty() {
 
 kubectl_cmd=(kubectl)
 helm_cmd=(helm)
-kube_context="${VWSO_E2E_KUBE_CONTEXT:-${KUBE_CONTEXT:-}}"
+kube_context="$(first_env BWESO_E2E_KUBE_CONTEXT VWSO_E2E_KUBE_CONTEXT KUBE_CONTEXT || true)"
 if [[ -n "${kube_context}" ]]; then
   kubectl_cmd+=(--context "${kube_context}")
   helm_cmd+=(--kube-context "${kube_context}")
@@ -57,37 +58,49 @@ require_cmd helm
 require_cmd jq
 require_cmd cargo
 
-namespace="${VWSO_E2E_NAMESPACE:-vwso-live-smoke}"
-release="${VWSO_E2E_RELEASE:-vwso}"
-image_repository="${VWSO_E2E_IMAGE_REPOSITORY:-ghcr.io/ponchia/vaultwarden-secrets-operator}"
-image_tag="${VWSO_E2E_IMAGE_TAG:-}"
-credentials_secret="${VWSO_E2E_CREDENTIALS_SECRET:-vwso-live-credentials}"
-pull_secret="${VWSO_E2E_IMAGE_PULL_SECRET:-}"
-target_secret="vwso-smoke-secret"
-selector_file="${VWSO_E2E_SELECTOR_FILE:-}"
+namespace="$(first_env BWESO_E2E_NAMESPACE VWSO_E2E_NAMESPACE || true)"
+namespace="${namespace:-bweso-live-smoke}"
+release="$(first_env BWESO_E2E_RELEASE VWSO_E2E_RELEASE || true)"
+release="${release:-bweso}"
+image_repository="$(first_env BWESO_E2E_IMAGE_REPOSITORY VWSO_E2E_IMAGE_REPOSITORY || true)"
+image_repository="${image_repository:-ghcr.io/ponchia/bitwarden-eso-provider}"
+image_tag="$(first_env BWESO_E2E_IMAGE_TAG VWSO_E2E_IMAGE_TAG || true)"
+credentials_secret="$(first_env BWESO_E2E_CREDENTIALS_SECRET VWSO_E2E_CREDENTIALS_SECRET || true)"
+credentials_secret="${credentials_secret:-bweso-live-credentials}"
+pull_secret="$(first_env BWESO_E2E_IMAGE_PULL_SECRET VWSO_E2E_IMAGE_PULL_SECRET || true)"
+target_secret="bweso-smoke-secret"
+selector_file="$(first_env BWESO_E2E_SELECTOR_FILE VWSO_E2E_SELECTOR_FILE || true)"
 cleanup_namespace=true
-if truthy "${VWSO_E2E_KEEP_NAMESPACE:-}"; then
+if truthy "$(first_env BWESO_E2E_KEEP_NAMESPACE VWSO_E2E_KEEP_NAMESPACE || true)"; then
   cleanup_namespace=false
 fi
 
-[[ -n "${image_tag}" ]] || fail "set VWSO_E2E_IMAGE_TAG to the image tag to test"
+[[ -n "${image_tag}" ]] || fail "set BWESO_E2E_IMAGE_TAG to the image tag to test"
 
-vaultwarden_url="$(first_nonempty "$(env_or_empty VWSO_TEST_VAULTWARDEN_URL)" "$(env_or_empty VWSO_VAULTWARDEN_URL)" || true)"
-identity_url="$(first_nonempty "$(env_or_empty VWSO_TEST_IDENTITY_URL)" "$(env_or_empty VWSO_IDENTITY_URL)" || true)"
-api_url="$(first_nonempty "$(env_or_empty VWSO_TEST_API_URL)" "$(env_or_empty VWSO_API_URL)" || true)"
-client_id="$(first_nonempty "$(env_or_empty VWSO_TEST_CLIENT_ID)" "$(env_or_empty VWSO_CLIENT_ID)" || true)"
-client_secret="$(first_nonempty "$(env_or_empty VWSO_TEST_CLIENT_SECRET)" "$(env_or_empty VWSO_CLIENT_SECRET)" || true)"
-master_password="$(first_nonempty "$(env_or_empty VWSO_TEST_MASTER_PASSWORD)" "$(env_or_empty VWSO_MASTER_PASSWORD)" || true)"
+single_origin_url="$(
+  first_env \
+    BWESO_TEST_SINGLE_ORIGIN_URL BWESO_SINGLE_ORIGIN_URL \
+    VWSO_TEST_VAULTWARDEN_URL VWSO_VAULTWARDEN_URL || true
+)"
+identity_url="$(
+  first_env \
+    BWESO_TEST_IDENTITY_URL BWESO_IDENTITY_URL \
+    VWSO_TEST_IDENTITY_URL VWSO_IDENTITY_URL || true
+)"
+api_url="$(first_env BWESO_TEST_API_URL BWESO_API_URL VWSO_TEST_API_URL VWSO_API_URL || true)"
+client_id="$(first_env BWESO_TEST_CLIENT_ID BWESO_CLIENT_ID VWSO_TEST_CLIENT_ID VWSO_CLIENT_ID || true)"
+client_secret="$(first_env BWESO_TEST_CLIENT_SECRET BWESO_CLIENT_SECRET VWSO_TEST_CLIENT_SECRET VWSO_CLIENT_SECRET || true)"
+master_password="$(first_env BWESO_TEST_MASTER_PASSWORD BWESO_MASTER_PASSWORD VWSO_TEST_MASTER_PASSWORD VWSO_MASTER_PASSWORD || true)"
 
-if [[ -n "${vaultwarden_url}" && ( -n "${identity_url}" || -n "${api_url}" ) ]]; then
-  fail "use either VWSO_TEST_VAULTWARDEN_URL/VWSO_VAULTWARDEN_URL or split identity/api URLs, not both"
+if [[ -n "${single_origin_url}" && ( -n "${identity_url}" || -n "${api_url}" ) ]]; then
+  fail "use either BWESO_TEST_SINGLE_ORIGIN_URL/BWESO_SINGLE_ORIGIN_URL or split identity/api URLs, not both"
 fi
-if [[ -z "${vaultwarden_url}" && ( -z "${identity_url}" || -z "${api_url}" ) ]]; then
+if [[ -z "${single_origin_url}" && ( -z "${identity_url}" || -z "${api_url}" ) ]]; then
   fail "set a single-origin URL or both split endpoint URLs"
 fi
-[[ -n "${client_id}" ]] || fail "set VWSO_TEST_CLIENT_ID or VWSO_CLIENT_ID"
-[[ -n "${client_secret}" ]] || fail "set VWSO_TEST_CLIENT_SECRET or VWSO_CLIENT_SECRET"
-[[ -n "${master_password}" ]] || fail "set VWSO_TEST_MASTER_PASSWORD or VWSO_MASTER_PASSWORD"
+[[ -n "${client_id}" ]] || fail "set BWESO_TEST_CLIENT_ID or BWESO_CLIENT_ID"
+[[ -n "${client_secret}" ]] || fail "set BWESO_TEST_CLIENT_SECRET or BWESO_CLIENT_SECRET"
+[[ -n "${master_password}" ]] || fail "set BWESO_TEST_MASTER_PASSWORD or BWESO_MASTER_PASSWORD"
 
 tmp_dir="$(mktemp -d)"
 cleanup() {
@@ -104,14 +117,15 @@ cleanup() {
     done
     log "namespace ${namespace} is still terminating; inspect it manually if it does not disappear"
   else
-    log "leaving namespace ${namespace} because VWSO_E2E_KEEP_NAMESPACE is set"
+    log "leaving namespace ${namespace} because BWESO_E2E_KEEP_NAMESPACE is set"
   fi
 }
 trap cleanup EXIT
 
 selector_from_env() {
-  local key="${VWSO_TEST_ITEM_KEY:-}"
-  local property="${VWSO_TEST_PROPERTY:-}"
+  local key property
+  key="$(first_env BWESO_TEST_ITEM_KEY VWSO_TEST_ITEM_KEY || true)"
+  property="$(first_env BWESO_TEST_PROPERTY VWSO_TEST_PROPERTY || true)"
   [[ -n "${key}" && -n "${property}" ]] || return 1
   jq -n --arg key "${key}" --arg property "${property}" \
     '{key: $key, property: $property}' >"${tmp_dir}/selector.json"
@@ -119,25 +133,25 @@ selector_from_env() {
 }
 
 selector_from_live_test() {
-  export VWSO_TEST_CLIENT_ID="${client_id}"
-  export VWSO_TEST_CLIENT_SECRET="${client_secret}"
-  export VWSO_TEST_MASTER_PASSWORD="${master_password}"
-  export VWSO_TEST_SELECTOR_OUTPUT="${tmp_dir}/selector.json"
-  if [[ -n "${vaultwarden_url}" ]]; then
-    export VWSO_TEST_VAULTWARDEN_URL="${vaultwarden_url}"
-    unset VWSO_TEST_IDENTITY_URL VWSO_TEST_API_URL
+  export BWESO_TEST_CLIENT_ID="${client_id}"
+  export BWESO_TEST_CLIENT_SECRET="${client_secret}"
+  export BWESO_TEST_MASTER_PASSWORD="${master_password}"
+  export BWESO_TEST_SELECTOR_OUTPUT="${tmp_dir}/selector.json"
+  if [[ -n "${single_origin_url}" ]]; then
+    export BWESO_TEST_SINGLE_ORIGIN_URL="${single_origin_url}"
+    unset BWESO_TEST_IDENTITY_URL BWESO_TEST_API_URL
   else
-    export VWSO_TEST_IDENTITY_URL="${identity_url}"
-    export VWSO_TEST_API_URL="${api_url}"
-    unset VWSO_TEST_VAULTWARDEN_URL
+    export BWESO_TEST_IDENTITY_URL="${identity_url}"
+    export BWESO_TEST_API_URL="${api_url}"
+    unset BWESO_TEST_SINGLE_ORIGIN_URL
   fi
 
-  if [[ -z "${VWSO_TEST_ITEM_KEY:-}" ]]; then
-    export VWSO_TEST_ALLOW_ANY_ITEM="${VWSO_TEST_ALLOW_ANY_ITEM:-true}"
+  if [[ -z "$(first_env BWESO_TEST_ITEM_KEY VWSO_TEST_ITEM_KEY || true)" ]]; then
+    export BWESO_TEST_ALLOW_ANY_ITEM="${BWESO_TEST_ALLOW_ANY_ITEM:-true}"
   fi
 
   log "selecting a live vault item without printing values"
-  (cd "${ROOT_DIR}" && cargo test -p vwso-vaultwarden --test live_vaultwarden -- --nocapture)
+  (cd "${ROOT_DIR}" && cargo test -p bweso-bitwarden --test live_bitwarden -- --nocapture)
   selector_file="${tmp_dir}/selector.json"
 }
 
@@ -155,12 +169,14 @@ property="$(jq -r '.property // empty' "${selector_file}")"
 log "creating namespace ${namespace}"
 "${kubectl_cmd[@]}" create namespace "${namespace}" --dry-run=client -o yaml | "${kubectl_cmd[@]}" apply -f - >/dev/null
 
-if [[ -n "${VWSO_E2E_GHCR_TOKEN:-}" ]]; then
+ghcr_token="$(first_env BWESO_E2E_GHCR_TOKEN VWSO_E2E_GHCR_TOKEN || true)"
+if [[ -n "${ghcr_token}" ]]; then
   pull_secret="${pull_secret:-ghcr-pull}"
-  ghcr_user="${VWSO_E2E_GHCR_USER:-${GITHUB_ACTOR:-vwso-smoke}}"
-  auth="$(printf '%s:%s' "${ghcr_user}" "${VWSO_E2E_GHCR_TOKEN}" | base64 | tr -d '\n')"
+  ghcr_user="$(first_env BWESO_E2E_GHCR_USER VWSO_E2E_GHCR_USER GITHUB_ACTOR || true)"
+  ghcr_user="${ghcr_user:-bweso-smoke}"
+  auth="$(printf '%s:%s' "${ghcr_user}" "${ghcr_token}" | base64 | tr -d '\n')"
   cat >"${tmp_dir}/dockerconfigjson" <<EOF
-{"auths":{"ghcr.io":{"username":"${ghcr_user}","password":"${VWSO_E2E_GHCR_TOKEN}","auth":"${auth}"}}}
+{"auths":{"ghcr.io":{"username":"${ghcr_user}","password":"${ghcr_token}","auth":"${auth}"}}}
 EOF
   "${kubectl_cmd[@]}" -n "${namespace}" create secret generic "${pull_secret}" \
     --type=kubernetes.io/dockerconfigjson \
@@ -188,8 +204,8 @@ helm_args=(
   --set-string "credentials.existingSecret.name=${credentials_secret}"
   --set-string "config.cacheTtlSeconds=2"
 )
-if [[ -n "${vaultwarden_url}" ]]; then
-  helm_args+=(--set-string "config.vaultwardenUrl=${vaultwarden_url}")
+if [[ -n "${single_origin_url}" ]]; then
+  helm_args+=(--set-string "config.singleOriginUrl=${single_origin_url}")
 else
   helm_args+=(--set-string "config.identityUrl=${identity_url}")
   helm_args+=(--set-string "config.apiUrl=${api_url}")
@@ -201,7 +217,7 @@ fi
 log "installing webhook chart ${image_repository}:${image_tag}"
 "${helm_cmd[@]}" "${helm_args[@]}" >/dev/null
 
-selector="app.kubernetes.io/instance=${release},app.kubernetes.io/name=vaultwarden-secrets-operator"
+selector="app.kubernetes.io/instance=${release},app.kubernetes.io/name=bitwarden-eso-provider"
 log "waiting for webhook rollout"
 "${kubectl_cmd[@]}" -n "${namespace}" rollout status deployment -l "${selector}" --timeout=180s >/dev/null
 
@@ -212,7 +228,7 @@ cat >"${tmp_dir}/eso.yaml" <<EOF
 apiVersion: external-secrets.io/v1
 kind: SecretStore
 metadata:
-  name: vaultwarden-live
+  name: bitwarden-live
   namespace: ${namespace}
 spec:
   provider:
@@ -235,13 +251,13 @@ spec:
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
-  name: vwso-smoke
+  name: bweso-smoke
   namespace: ${namespace}
 spec:
   refreshPolicy: Periodic
   refreshInterval: 10s
   secretStoreRef:
-    name: vaultwarden-live
+    name: bitwarden-live
     kind: SecretStore
   target:
     name: ${target_secret}
@@ -256,43 +272,43 @@ spec:
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
-  name: vwso-missing-property
+  name: bweso-missing-property
   namespace: ${namespace}
 spec:
   refreshPolicy: Periodic
   refreshInterval: 10s
   secretStoreRef:
-    name: vaultwarden-live
+    name: bitwarden-live
     kind: SecretStore
   target:
-    name: vwso-missing-property-secret
+    name: bweso-missing-property-secret
     creationPolicy: Owner
     deletionPolicy: Delete
   data:
     - secretKey: resolved
       remoteRef:
         key: "${item_key}"
-        property: "__vwso_missing_property_$(date +%s)"
+        property: "__bweso_missing_property_$(date +%s)"
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
-  name: vwso-missing-item
+  name: bweso-missing-item
   namespace: ${namespace}
 spec:
   refreshPolicy: Periodic
   refreshInterval: 10s
   secretStoreRef:
-    name: vaultwarden-live
+    name: bitwarden-live
     kind: SecretStore
   target:
-    name: vwso-missing-item-secret
+    name: bweso-missing-item-secret
     creationPolicy: Owner
     deletionPolicy: Delete
   data:
     - secretKey: resolved
       remoteRef:
-        key: "__vwso_missing_item_$(date +%s)"
+        key: "__bweso_missing_item_$(date +%s)"
         property: "${property}"
 EOF
 
@@ -300,7 +316,7 @@ log "applying ESO smoke resources"
 "${kubectl_cmd[@]}" apply -f "${tmp_dir}/eso.yaml" >/dev/null
 
 log "waiting for successful sync"
-"${kubectl_cmd[@]}" -n "${namespace}" wait externalsecret/vwso-smoke \
+"${kubectl_cmd[@]}" -n "${namespace}" wait externalsecret/bweso-smoke \
   --for=condition=Ready --timeout=180s >/dev/null
 
 wait_secret_nonempty() {
@@ -323,18 +339,18 @@ wait_secret_nonempty "${target_secret}" resolved
 
 log "checking Secret recreation"
 "${kubectl_cmd[@]}" -n "${namespace}" delete secret "${target_secret}" >/dev/null
-"${kubectl_cmd[@]}" -n "${namespace}" annotate externalsecret/vwso-smoke \
+"${kubectl_cmd[@]}" -n "${namespace}" annotate externalsecret/bweso-smoke \
   "force-sync=$(force_sync_value)" --overwrite >/dev/null
-"${kubectl_cmd[@]}" -n "${namespace}" wait externalsecret/vwso-smoke \
+"${kubectl_cmd[@]}" -n "${namespace}" wait externalsecret/bweso-smoke \
   --for=condition=Ready --timeout=180s >/dev/null
 wait_secret_nonempty "${target_secret}" resolved
 
 log "checking webhook restart plus resync"
 "${kubectl_cmd[@]}" -n "${namespace}" rollout restart deployment -l "${selector}" >/dev/null
 "${kubectl_cmd[@]}" -n "${namespace}" rollout status deployment -l "${selector}" --timeout=180s >/dev/null
-"${kubectl_cmd[@]}" -n "${namespace}" annotate externalsecret/vwso-smoke \
+"${kubectl_cmd[@]}" -n "${namespace}" annotate externalsecret/bweso-smoke \
   "force-sync=$(force_sync_value)" --overwrite >/dev/null
-"${kubectl_cmd[@]}" -n "${namespace}" wait externalsecret/vwso-smoke \
+"${kubectl_cmd[@]}" -n "${namespace}" wait externalsecret/bweso-smoke \
   --for=condition=Ready --timeout=180s >/dev/null
 wait_secret_nonempty "${target_secret}" resolved
 
@@ -355,12 +371,12 @@ wait_negative_absent() {
 }
 
 log "checking expected negative cases"
-wait_negative_absent vwso-missing-property
-wait_negative_absent vwso-missing-item
-if "${kubectl_cmd[@]}" -n "${namespace}" get secret vwso-missing-property-secret >/dev/null 2>&1; then
+wait_negative_absent bweso-missing-property
+wait_negative_absent bweso-missing-item
+if "${kubectl_cmd[@]}" -n "${namespace}" get secret bweso-missing-property-secret >/dev/null 2>&1; then
   fail "missing-property ExternalSecret unexpectedly created a target Secret"
 fi
-if "${kubectl_cmd[@]}" -n "${namespace}" get secret vwso-missing-item-secret >/dev/null 2>&1; then
+if "${kubectl_cmd[@]}" -n "${namespace}" get secret bweso-missing-item-secret >/dev/null 2>&1; then
   fail "missing-item ExternalSecret unexpectedly created a target Secret"
 fi
 

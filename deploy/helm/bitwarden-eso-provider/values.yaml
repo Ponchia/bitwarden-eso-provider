@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/ponchia/vaultwarden-secrets-operator
+  repository: ghcr.io/ponchia/bitwarden-eso-provider
   pullPolicy: IfNotPresent
   tag: ""
 
@@ -38,14 +38,17 @@ service:
   annotations: {}
 
 config:
-  # Set vaultwardenUrl for single-origin Vaultwarden/self-hosted Bitwarden.
+  # Set singleOriginUrl for Vaultwarden or self-hosted Bitwarden deployments
+  # where identity and API routes share one origin.
+  singleOriginUrl: ""
+  # Deprecated alias for singleOriginUrl. Kept for pre-release compatibility.
   vaultwardenUrl: ""
   # Or set both identityUrl and apiUrl for Bitwarden Cloud/split endpoints.
   identityUrl: ""
   apiUrl: ""
   cacheTtlSeconds: 60
-  deviceIdentifier: vaultwarden-secrets-operator
-  deviceName: Vaultwarden Secrets Operator
+  deviceIdentifier: bitwarden-eso-provider
+  deviceName: Bitwarden ESO Provider
   deviceType: 22
 
 credentials:

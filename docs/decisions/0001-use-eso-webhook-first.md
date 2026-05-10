@@ -6,8 +6,8 @@ Accepted for initial implementation.
 
 ## Context
 
-A standalone Vaultwarden-to-Kubernetes sync loop is easy to build but tends to
-mix responsibilities:
+A standalone Bitwarden-to-Kubernetes sync loop is easy to build but tends to mix
+responsibilities:
 
 - It fetches and decrypts source secrets.
 - It owns Kubernetes Secret lifecycle.
@@ -16,7 +16,7 @@ mix responsibilities:
 
 External Secrets Operator already solves the Kubernetes-side lifecycle and has a
 generic webhook provider. Using that provider lets this project focus on the
-Vaultwarden-specific work first.
+Bitwarden-compatible work first.
 
 ## Decision
 
@@ -29,5 +29,4 @@ operator.
   `ExternalSecret`.
 - ESO owns Secret creation, updates, deletion, templating, and status.
 - This project can remain a smaller Rust service.
-- Advanced Vaultwarden-specific UX may require a native controller later.
-
+- Advanced Bitwarden-specific UX may require a native controller later.

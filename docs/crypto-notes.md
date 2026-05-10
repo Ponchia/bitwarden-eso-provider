@@ -25,7 +25,7 @@ sync path.
 
 ## Master Password Unlock
 
-The Vaultwarden crate derives master keys from the normalized account email
+The Bitwarden client crate derives master keys from the normalized account email
 (`trim` + lowercase) and the server prelogin KDF config:
 
 - PBKDF2-HMAC-SHA256 (`KdfType = 0`)
@@ -41,5 +41,6 @@ info labels to decrypt the master-key-wrapped 64-byte user key.
 
 This code covers master-password user-key unlock and field-level cipher
 decryption once the correct user, organization, or item key is available. User
-API-key login, organization key unwrap, and per-cipher key handling are separate
-milestones and must receive their own fixture tests.
+API-key login and per-cipher key handling are implemented. Organization key
+unwrap is separate `v1.0` work and must receive fixture tests before support is
+advertised.

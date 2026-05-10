@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-//! Shared data types for Vaultwarden Secrets Operator.
+//! Shared data types for Bitwarden ESO Provider.
 
 use std::collections::BTreeMap;
 

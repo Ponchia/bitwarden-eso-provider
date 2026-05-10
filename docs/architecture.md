@@ -2,7 +2,7 @@
 
 ## Goal
 
-Provide a serious, public-ready path for syncing Vaultwarden or Bitwarden
+Provide a serious, public-ready path for syncing Bitwarden or Vaultwarden
 Password Manager items into Kubernetes without making vault item metadata the
 Kubernetes control plane.
 
@@ -13,7 +13,7 @@ The first target is an External Secrets Operator webhook provider:
 ```text
 ExternalSecret
   -> SecretStore(provider.webhook)
-  -> vwso-eso-webhook
+  -> bitwarden-eso-provider
   -> Bitwarden-compatible API
   -> decrypted item fields
   -> ESO-managed Kubernetes Secret
@@ -24,7 +24,7 @@ This project should own:
 - Bitwarden-compatible authentication.
 - Local decryption and field extraction.
 - Master-password user-key unlock.
-- Vaultwarden and Bitwarden API-key login and sync.
+- Bitwarden and Vaultwarden API-key login and sync.
 - Provider-level caching and rate limiting.
 - Redacted logs, metrics, and health checks.
 - A small HTTP contract usable by ESO's generic webhook provider.
@@ -54,7 +54,7 @@ also easier to test because the webhook can be exercised without a Kubernetes
 controller-runtime reconcile loop.
 
 A native operator becomes better only if this project needs first-class
-Vaultwarden-specific Kubernetes APIs. Examples would be custom CRDs for vault
+Bitwarden-specific Kubernetes APIs. Examples would be custom CRDs for vault
 item discovery, project/team mapping, controller-owned rollout policies, or
 status that cannot be represented cleanly through ESO `ExternalSecret`
 conditions. Until then, a standalone operator would mostly duplicate mature ESO
@@ -67,13 +67,13 @@ The 1Password Operator comparison maps naturally to this split:
   refresh.
 - Stakater Reloader, checksum annotations, or GitOps rollout annotations cover
   workload restarts after Secret changes.
-- This project covers the missing Vaultwarden/Bitwarden Password Manager
+- This project covers the missing Bitwarden/Vaultwarden Password Manager
   provider implementation.
 
 ## Later Options
 
 - Native External Secrets Operator provider if the webhook API becomes too
   limiting.
-- Native Rust controller with `kube-rs` if we need Vaultwarden-specific CRDs.
+- Native Rust controller with `kube-rs` if we need Bitwarden-specific CRDs.
 - Secrets Store CSI provider only if file mount semantics become a first-class
   target.

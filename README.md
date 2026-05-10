@@ -1,70 +1,70 @@
-# Vaultwarden Secrets Operator
+# Bitwarden ESO Provider
 
-Vaultwarden Secrets Operator is an experimental Rust implementation for using a
-Vaultwarden or Bitwarden Password Manager vault as a Kubernetes secret source.
+Bitwarden ESO Provider lets External Secrets Operator resolve Kubernetes Secrets
+from Bitwarden Password Manager and Vaultwarden vault items.
 
-The initial target is not a bespoke Kubernetes controller. The first production
-path is an External Secrets Operator webhook provider:
+It uses the Bitwarden Password Manager vault protocol: user API-key login,
+master-password unlock, sync, and local item decryption. It is not a Bitwarden
+Secrets Manager (`bws`) provider.
+
+The production path is deliberately narrow:
 
 ```text
-Vaultwarden/Bitwarden -> vwso-eso-webhook -> External Secrets Operator -> Kubernetes Secret
+Bitwarden Cloud / Vaultwarden -> bitwarden-eso-provider -> External Secrets Operator -> Kubernetes Secret
 ```
 
-This keeps Kubernetes ownership, refresh policy, deletion behavior, templating,
-status conditions, and GitOps integration in External Secrets Operator while this
-project focuses on one narrow responsibility: safely authenticating to
-Bitwarden-compatible Password Manager APIs and resolving encrypted vault items.
+External Secrets Operator owns refresh policy, deletion behavior, status
+conditions, templating, and GitOps integration. This project owns only the
+Bitwarden-compatible authentication, decryption, and webhook resolution layer.
 
 ## Status
 
-Experimental implementation. The core Vaultwarden + External Secrets Operator
-path has been live-tested against a k3s cluster, including initial sync, forced
-refresh, target Secret recreation, webhook restart, and expected not-found
-errors. Treat the public API and chart values as pre-1.0 until the first tagged
-release.
+Pre-1.0, but already live-tested.
 
-The current repository contains:
+Verified paths:
 
-- A Rust workspace with core model, Bitwarden-compatible client boundary, and
-  ESO webhook entrypoint crates.
-- Bitwarden-compatible authenticated encrypted string decryption.
+- Vaultwarden/self-hosted single-origin endpoints.
+- Bitwarden Cloud split endpoints.
+- Direct Rust live resolution against real vault data.
+- k3s + External Secrets Operator smoke tests covering initial sync, forced
+  refresh, target Secret recreation, webhook restart, and expected not-found
+  errors.
+
+Treat crate APIs, chart values, and metadata keys as unstable until the first
+tagged release.
+
+## Features
+
+- Rust workspace with a small ESO webhook binary and reusable client crates.
+- API-key login and sync for Bitwarden-compatible Password Manager servers.
 - Master-password user-key unlock for PBKDF2-SHA256 and Argon2id accounts.
-- A tested API-key login and sync client path backed by local fake servers for
-  both Vaultwarden-style single-origin and Bitwarden-style split endpoints,
-  wired into the ESO webhook runtime through environment configuration.
-- In-memory sync caching with explicit TTL and single-flight refresh behavior.
-- Architecture, threat-model, and reference notes.
-- Example External Secrets Operator manifests.
-- A Helm chart for deploying the webhook.
-- A repeatable live ESO smoke-test script.
-- CI scaffolding for formatting, clippy, unit tests, fake-server tests, and an
-  opt-in live Bitwarden-compatible smoke test.
-
-Bitwarden Cloud split endpoints are covered by fake-server tests and have been
-live-tested against a dedicated Bitwarden Cloud account.
+- Local encrypted string and vault item decryption.
+- Whole-item extraction or one-field extraction through ESO `remoteRef`.
+- In-memory sync cache with explicit TTL and single-flight refresh behavior.
+- Helm chart, ESO manifests, live smoke test script, architecture notes, threat
+  model, and release checklist.
 
 ## Design Principles
 
-- Kubernetes manifests declare what is synced. Vaultwarden items do not decide
-  target namespaces.
-- No Vaultwarden, Bitwarden, 1Password, or Kubernetes source code is vendored.
-  Reference repositories live outside this repo.
-- TLS verification is on by default and must not be silently bypassed.
-- The provider must not log secret values, decrypted item content, master
-  passwords, API tokens, or derived keys.
-- Deletes and restarts must use Kubernetes-native ownership or explicit opt-in
-  policy.
-- The first public version should be usable without cluster-admin permissions.
+- Kubernetes manifests declare what is synced. Vault item metadata never decides
+  target namespaces or Secret names.
+- No Bitwarden, Vaultwarden, 1Password, or Kubernetes source code is vendored.
+- TLS verification is on by default. HTTP is accepted only for localhost tests.
+- Logs must not contain secret values, master passwords, API tokens, or derived
+  keys.
+- Restarts and target Secret recreation use Kubernetes-native behavior.
+- The webhook itself does not need Kubernetes API RBAC.
 
-## Workspace
+## Layout
 
 ```text
-crates/vwso-core          Shared request/response and secret document types
-crates/vwso-vaultwarden   Bitwarden-compatible API and crypto boundary
-crates/vwso-eso-webhook   HTTP adapter for External Secrets Operator webhook
-deploy/eso                Example SecretStore and ExternalSecret manifests
-docs                      Architecture, decisions, threat model, research
-references                Notes pointing to local reference checkouts
+crates/bweso-core              Shared request/response and secret document types
+crates/bweso-bitwarden         Bitwarden-compatible API, crypto, and resolver
+crates/bitwarden-eso-provider  HTTP adapter for ESO's webhook provider
+deploy/eso                    Example SecretStore and ExternalSecret manifests
+deploy/helm                   Helm chart
+docs                          Architecture, install, compatibility, testing
+references                    Notes pointing to local reference checkouts
 ```
 
 ## Development
@@ -75,49 +75,55 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --all-targets
 ```
 
-Run the webhook locally:
+Run locally against Vaultwarden or a self-hosted single-origin Bitwarden server:
 
 ```bash
-VWSO_VAULTWARDEN_URL="https://vaultwarden.example.com" \
-VWSO_CLIENT_ID="user.<uuid>" \
-VWSO_CLIENT_SECRET="..." \
-VWSO_MASTER_PASSWORD="..." \
-VWSO_CACHE_TTL_SECONDS=60 \
-cargo run -p vwso-eso-webhook -- --listen 127.0.0.1:8080
+BWESO_SINGLE_ORIGIN_URL="https://vaultwarden.example.com" \
+BWESO_CLIENT_ID="user.<uuid>" \
+BWESO_CLIENT_SECRET="..." \
+BWESO_MASTER_PASSWORD="..." \
+BWESO_CACHE_TTL_SECONDS=60 \
+cargo run -p bitwarden-eso-provider -- --listen 127.0.0.1:8080
 ```
 
-For Bitwarden Cloud, configure split endpoints instead of `VWSO_VAULTWARDEN_URL`:
+Run locally against Bitwarden Cloud:
 
 ```bash
-VWSO_IDENTITY_URL="https://identity.bitwarden.com" \
-VWSO_API_URL="https://api.bitwarden.com" \
-VWSO_CLIENT_ID="user.<uuid>" \
-VWSO_CLIENT_SECRET="..." \
-VWSO_MASTER_PASSWORD="..." \
-VWSO_CACHE_TTL_SECONDS=60 \
-cargo run -p vwso-eso-webhook -- --listen 127.0.0.1:8080
+BWESO_IDENTITY_URL="https://identity.bitwarden.com" \
+BWESO_API_URL="https://api.bitwarden.com" \
+BWESO_CLIENT_ID="user.<uuid>" \
+BWESO_CLIENT_SECRET="..." \
+BWESO_MASTER_PASSWORD="..." \
+BWESO_CACHE_TTL_SECONDS=60 \
+cargo run -p bitwarden-eso-provider -- --listen 127.0.0.1:8080
 ```
 
-Compatibility details are in [`docs/compatibility.md`](docs/compatibility.md).
-Live smoke-test instructions are in [`docs/live-testing.md`](docs/live-testing.md).
+Legacy `VWSO_*` environment variables are accepted as aliases for now, but new
+deployments should use `BWESO_*`.
 
-Install the webhook with Helm:
+## Helm Install
 
 ```bash
-kubectl create namespace vwso-system
-kubectl -n vwso-system create secret generic vwso-credentials \
+kubectl create namespace bweso-system
+kubectl -n bweso-system create secret generic bweso-credentials \
   --from-literal=client-id='user.<uuid>' \
   --from-literal=client-secret='...' \
   --from-literal=master-password='...'
 
-helm upgrade --install vwso ./deploy/helm/vaultwarden-secrets-operator \
-  --namespace vwso-system \
-  --set-string config.vaultwardenUrl='https://vaultwarden.example.com' \
-  --set-string credentials.existingSecret.name=vwso-credentials
+helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
+  --namespace bweso-system \
+  --set-string config.singleOriginUrl='https://vaultwarden.example.com' \
+  --set-string credentials.existingSecret.name=bweso-credentials
 ```
+
+For Bitwarden Cloud, use `config.identityUrl=https://identity.bitwarden.com` and
+`config.apiUrl=https://api.bitwarden.com` instead of `config.singleOriginUrl`.
 
 Then create an ESO `SecretStore` and `ExternalSecret` using the examples under
 [`deploy/eso`](deploy/eso).
+
+Compatibility details are in [`docs/compatibility.md`](docs/compatibility.md).
+Live smoke-test instructions are in [`docs/live-testing.md`](docs/live-testing.md).
 
 ## License
 

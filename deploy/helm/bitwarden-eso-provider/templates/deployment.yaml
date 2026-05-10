@@ -1,18 +1,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "vwso.fullname" . }}
+  name: {{ include "bweso.fullname" . }}
   labels:
-    {{- include "vwso.labels" . | nindent 4 }}
+    {{- include "bweso.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "vwso.selectorLabels" . | nindent 6 }}
+      {{- include "bweso.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "vwso.selectorLabels" . | nindent 8 }}
+        {{- include "bweso.selectorLabels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -21,7 +21,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
-      serviceAccountName: {{ include "vwso.serviceAccountName" . }}
+      serviceAccountName: {{ include "bweso.serviceAccountName" . }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -30,7 +30,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: vwso-eso-webhook
+        - name: bitwarden-eso-provider
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
@@ -40,40 +40,41 @@ spec:
               containerPort: 8080
               protocol: TCP
           env:
-            {{- if .Values.config.vaultwardenUrl }}
-            - name: VWSO_VAULTWARDEN_URL
-              value: {{ .Values.config.vaultwardenUrl | quote }}
+            {{- $singleOriginUrl := default .Values.config.vaultwardenUrl .Values.config.singleOriginUrl }}
+            {{- if $singleOriginUrl }}
+            - name: BWESO_SINGLE_ORIGIN_URL
+              value: {{ $singleOriginUrl | quote }}
             {{- end }}
             {{- if .Values.config.identityUrl }}
-            - name: VWSO_IDENTITY_URL
+            - name: BWESO_IDENTITY_URL
               value: {{ .Values.config.identityUrl | quote }}
             {{- end }}
             {{- if .Values.config.apiUrl }}
-            - name: VWSO_API_URL
+            - name: BWESO_API_URL
               value: {{ .Values.config.apiUrl | quote }}
             {{- end }}
-            - name: VWSO_CLIENT_ID
+            - name: BWESO_CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "vwso.credentialsSecretName" . }}
+                  name: {{ include "bweso.credentialsSecretName" . }}
                   key: {{ .Values.credentials.existingSecret.keys.clientId | quote }}
-            - name: VWSO_CLIENT_SECRET
+            - name: BWESO_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "vwso.credentialsSecretName" . }}
+                  name: {{ include "bweso.credentialsSecretName" . }}
                   key: {{ .Values.credentials.existingSecret.keys.clientSecret | quote }}
-            - name: VWSO_MASTER_PASSWORD
+            - name: BWESO_MASTER_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "vwso.credentialsSecretName" . }}
+                  name: {{ include "bweso.credentialsSecretName" . }}
                   key: {{ .Values.credentials.existingSecret.keys.masterPassword | quote }}
-            - name: VWSO_CACHE_TTL_SECONDS
+            - name: BWESO_CACHE_TTL_SECONDS
               value: {{ .Values.config.cacheTtlSeconds | quote }}
-            - name: VWSO_DEVICE_IDENTIFIER
+            - name: BWESO_DEVICE_IDENTIFIER
               value: {{ .Values.config.deviceIdentifier | quote }}
-            - name: VWSO_DEVICE_NAME
+            - name: BWESO_DEVICE_NAME
               value: {{ .Values.config.deviceName | quote }}
-            - name: VWSO_DEVICE_TYPE
+            - name: BWESO_DEVICE_TYPE
               value: {{ .Values.config.deviceType | quote }}
             - name: RUST_LOG
               value: {{ .Values.logging.rustLog | quote }}

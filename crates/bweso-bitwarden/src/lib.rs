@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-//! Vaultwarden/Bitwarden-compatible client boundary.
+//! Bitwarden Password Manager and Vaultwarden-compatible client boundary.
 //!
 //! This crate will hold API, authentication, and decryption code. It currently
 //! exposes a narrow trait so adapters can be built and tested before the
@@ -12,14 +12,14 @@ pub mod crypto;
 pub mod keys;
 
 use async_trait::async_trait;
+use bweso_core::{require_non_empty, RemoteRef, SecretDocument, ValidationError};
 use secrecy::SecretString;
 use thiserror::Error;
 use url::Url;
-use vwso_core::{require_non_empty, RemoteRef, SecretDocument, ValidationError};
 
 pub use api::{
-    SyncResponse, VaultwardenApiClient, VaultwardenApiError, VaultwardenCacheConfig,
-    VaultwardenDevice, VaultwardenSession,
+    BitwardenApiClient, BitwardenApiError, BitwardenCacheConfig, BitwardenDevice, BitwardenSession,
+    SyncResponse,
 };
 pub use cipher::{
     CipherError, DecryptedCipher, DecryptedField, DecryptedLogin, DecryptedSshKey, EncryptedCipher,
@@ -34,11 +34,11 @@ pub use keys::{
 
 /// Single-origin Vaultwarden or self-hosted Bitwarden endpoint configuration.
 #[derive(Debug, Clone)]
-pub struct VaultwardenEndpoint {
+pub struct BitwardenEndpoint {
     base_url: Url,
 }
 
-impl VaultwardenEndpoint {
+impl BitwardenEndpoint {
     /// Parse and validate a single-origin Vaultwarden or self-hosted Bitwarden
     /// base URL.
     ///
@@ -49,19 +49,19 @@ impl VaultwardenEndpoint {
     ///
     /// Returns an error when the URL is empty, malformed, or uses an insecure
     /// non-local transport.
-    pub fn parse(raw: &str) -> Result<Self, VaultwardenClientError> {
-        Self::parse_named(raw, "vaultwarden_url")
+    pub fn parse(raw: &str) -> Result<Self, BitwardenClientError> {
+        Self::parse_named(raw, "single_origin_url")
     }
 
-    fn parse_named(raw: &str, field_name: &'static str) -> Result<Self, VaultwardenClientError> {
+    fn parse_named(raw: &str, field_name: &'static str) -> Result<Self, BitwardenClientError> {
         require_non_empty(raw, field_name)?;
         let base_url =
-            Url::parse(raw).map_err(|source| VaultwardenClientError::InvalidEndpoint { source })?;
+            Url::parse(raw).map_err(|source| BitwardenClientError::InvalidEndpoint { source })?;
 
         let host = base_url.host_str().unwrap_or_default();
         let is_localhost = matches!(host, "localhost" | "127.0.0.1" | "::1");
         if base_url.scheme() != "https" && !(base_url.scheme() == "http" && is_localhost) {
-            return Err(VaultwardenClientError::InsecureEndpoint);
+            return Err(BitwardenClientError::InsecureEndpoint);
         }
 
         Ok(Self { base_url })
@@ -76,16 +76,16 @@ impl VaultwardenEndpoint {
 
 /// Fully resolved Bitwarden-compatible endpoint bases.
 #[derive(Debug, Clone)]
-pub struct VaultwardenEndpoints {
+pub struct BitwardenEndpoints {
     identity_url: Url,
     api_url: Url,
 }
 
-impl VaultwardenEndpoints {
+impl BitwardenEndpoints {
     /// Build endpoint bases from a single Vaultwarden or self-hosted Bitwarden
     /// origin.
     #[must_use]
-    pub fn from_single_origin(endpoint: VaultwardenEndpoint) -> Self {
+    pub fn from_single_origin(endpoint: BitwardenEndpoint) -> Self {
         let base_url = endpoint.base_url;
 
         Self {
@@ -103,9 +103,9 @@ impl VaultwardenEndpoints {
     ///
     /// Returns an error when either URL is empty, malformed, or uses an
     /// insecure non-local transport.
-    pub fn parse_split(identity_url: &str, api_url: &str) -> Result<Self, VaultwardenClientError> {
-        let identity = VaultwardenEndpoint::parse_named(identity_url, "identity_url")?;
-        let api = VaultwardenEndpoint::parse_named(api_url, "api_url")?;
+    pub fn parse_split(identity_url: &str, api_url: &str) -> Result<Self, BitwardenClientError> {
+        let identity = BitwardenEndpoint::parse_named(identity_url, "identity_url")?;
+        let api = BitwardenEndpoint::parse_named(api_url, "api_url")?;
 
         Ok(Self {
             identity_url: normalize_endpoint_base(identity.base_url()),
@@ -145,9 +145,10 @@ fn append_path_segments(base_url: &Url, segments: &[&str]) -> Url {
     url
 }
 
-/// Authentication material for a dedicated Vaultwarden or Bitwarden user.
+/// Authentication material for a dedicated Bitwarden Password Manager or
+/// Vaultwarden user.
 #[derive(Clone)]
-pub struct VaultwardenAuth {
+pub struct BitwardenAuth {
     /// User API key client ID.
     pub client_id: String,
     /// User API key client secret.
@@ -158,15 +159,15 @@ pub struct VaultwardenAuth {
 
 /// Source selector understood by the Bitwarden-compatible provider.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct VaultwardenSelector {
+pub struct BitwardenSelector {
     /// Vault item key, ID, or stable path.
     pub key: String,
     /// Optional item field to extract.
     pub property: Option<String>,
 }
 
-impl TryFrom<RemoteRef> for VaultwardenSelector {
-    type Error = VaultwardenClientError;
+impl TryFrom<RemoteRef> for BitwardenSelector {
+    type Error = BitwardenClientError;
 
     fn try_from(remote_ref: RemoteRef) -> Result<Self, Self::Error> {
         require_non_empty(&remote_ref.key, "remote_ref.key")?;
@@ -179,7 +180,7 @@ impl TryFrom<RemoteRef> for VaultwardenSelector {
 
 /// Provider boundary used by Kubernetes-facing adapters.
 #[async_trait]
-pub trait VaultwardenProvider: Send + Sync {
+pub trait BitwardenProvider: Send + Sync {
     /// Resolve a selector into a secret document.
     ///
     /// # Errors
@@ -188,8 +189,8 @@ pub trait VaultwardenProvider: Send + Sync {
     /// or map the selected vault item.
     async fn resolve(
         &self,
-        selector: VaultwardenSelector,
-    ) -> Result<SecretDocument, VaultwardenClientError>;
+        selector: BitwardenSelector,
+    ) -> Result<SecretDocument, BitwardenClientError>;
 }
 
 /// Placeholder provider used while the API and crypto implementation is designed.
@@ -197,18 +198,18 @@ pub trait VaultwardenProvider: Send + Sync {
 pub struct NotImplementedProvider;
 
 #[async_trait]
-impl VaultwardenProvider for NotImplementedProvider {
+impl BitwardenProvider for NotImplementedProvider {
     async fn resolve(
         &self,
-        selector: VaultwardenSelector,
-    ) -> Result<SecretDocument, VaultwardenClientError> {
-        Err(VaultwardenClientError::NotImplemented { key: selector.key })
+        selector: BitwardenSelector,
+    ) -> Result<SecretDocument, BitwardenClientError> {
+        Err(BitwardenClientError::NotImplemented { key: selector.key })
     }
 }
 
 /// Errors returned by the Bitwarden-compatible client boundary.
 #[derive(Debug, Error)]
-pub enum VaultwardenClientError {
+pub enum BitwardenClientError {
     /// Shared validation failure.
     #[error(transparent)]
     Validation(#[from] ValidationError),
@@ -223,9 +224,9 @@ pub enum VaultwardenClientError {
     KeyDerivation(#[from] KeyDerivationError),
     /// Bitwarden-compatible HTTP API failure.
     #[error(transparent)]
-    Api(#[from] VaultwardenApiError),
+    Api(#[from] BitwardenApiError),
     /// URL parsing failed.
-    #[error("invalid Vaultwarden endpoint")]
+    #[error("invalid Bitwarden-compatible endpoint")]
     InvalidEndpoint {
         /// URL parser source error.
         #[source]
@@ -235,7 +236,7 @@ pub enum VaultwardenClientError {
     #[error("Bitwarden-compatible endpoint must use HTTPS except for localhost development")]
     InsecureEndpoint,
     /// Requested operation is not implemented yet.
-    #[error("Vaultwarden resolution is not implemented for key {key}")]
+    #[error("Bitwarden-compatible resolution is not implemented for key {key}")]
     NotImplemented {
         /// Requested key.
         key: String,
@@ -248,16 +249,16 @@ mod tests {
 
     #[test]
     fn endpoint_requires_https_for_non_local_hosts() {
-        let Err(err) = VaultwardenEndpoint::parse("http://vault.example.test") else {
+        let Err(err) = BitwardenEndpoint::parse("http://vault.example.test") else {
             unreachable!("non-local HTTP endpoint should fail validation");
         };
 
-        assert!(matches!(err, VaultwardenClientError::InsecureEndpoint));
+        assert!(matches!(err, BitwardenClientError::InsecureEndpoint));
     }
 
     #[test]
     fn endpoint_allows_local_http_for_development() {
-        let endpoint = match VaultwardenEndpoint::parse("http://127.0.0.1:8080") {
+        let endpoint = match BitwardenEndpoint::parse("http://127.0.0.1:8080") {
             Ok(endpoint) => endpoint,
             Err(error) => unreachable!("local HTTP endpoint should be accepted: {error}"),
         };
@@ -267,11 +268,11 @@ mod tests {
 
     #[test]
     fn single_origin_endpoints_append_identity_and_api_paths() {
-        let endpoint = match VaultwardenEndpoint::parse("https://vault.example.test/base/") {
+        let endpoint = match BitwardenEndpoint::parse("https://vault.example.test/base/") {
             Ok(endpoint) => endpoint,
             Err(error) => unreachable!("endpoint should parse: {error}"),
         };
-        let endpoints = VaultwardenEndpoints::from_single_origin(endpoint);
+        let endpoints = BitwardenEndpoints::from_single_origin(endpoint);
 
         assert_eq!(
             endpoints.identity_url().as_str(),
@@ -285,7 +286,7 @@ mod tests {
 
     #[test]
     fn split_endpoints_keep_identity_and_api_bases_separate() {
-        let endpoints = match VaultwardenEndpoints::parse_split(
+        let endpoints = match BitwardenEndpoints::parse_split(
             "https://identity.bitwarden.com/",
             "https://api.bitwarden.com/",
         ) {
@@ -302,19 +303,19 @@ mod tests {
 
     #[test]
     fn split_endpoints_reject_insecure_remote_http() {
-        let Err(err) = VaultwardenEndpoints::parse_split(
+        let Err(err) = BitwardenEndpoints::parse_split(
             "https://identity.bitwarden.com",
             "http://api.example.test",
         ) else {
             unreachable!("split endpoints should reject insecure remote HTTP");
         };
 
-        assert!(matches!(err, VaultwardenClientError::InsecureEndpoint));
+        assert!(matches!(err, BitwardenClientError::InsecureEndpoint));
     }
 
     #[test]
     fn selector_rejects_empty_keys() {
-        let Err(err) = VaultwardenSelector::try_from(RemoteRef {
+        let Err(err) = BitwardenSelector::try_from(RemoteRef {
             key: " ".to_string(),
             property: None,
             version: None,
@@ -322,6 +323,6 @@ mod tests {
             unreachable!("empty selector key should fail validation");
         };
 
-        assert!(matches!(err, VaultwardenClientError::Validation(_)));
+        assert!(matches!(err, BitwardenClientError::Validation(_)));
     }
 }

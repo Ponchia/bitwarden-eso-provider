@@ -64,8 +64,8 @@ jobs:
       - name: Package chart
         run: |
           mkdir -p dist
-          helm lint deploy/helm/vaultwarden-secrets-operator -f deploy/helm/lint-values.yaml
-          helm package deploy/helm/vaultwarden-secrets-operator --destination dist
+          helm lint deploy/helm/bitwarden-eso-provider -f deploy/helm/lint-values.yaml
+          helm package deploy/helm/bitwarden-eso-provider --destination dist
 
       - name: Upload chart artifact
         uses: actions/upload-artifact@v4

@@ -45,10 +45,10 @@ jobs:
         uses: azure/setup-helm@v4
 
       - name: Lint chart
-        run: helm lint deploy/helm/vaultwarden-secrets-operator -f deploy/helm/lint-values.yaml
+        run: helm lint deploy/helm/bitwarden-eso-provider -f deploy/helm/lint-values.yaml
 
       - name: Render chart
-        run: helm template vwso deploy/helm/vaultwarden-secrets-operator -f deploy/helm/lint-values.yaml --namespace vwso-system
+        run: helm template bweso deploy/helm/bitwarden-eso-provider -f deploy/helm/lint-values.yaml --namespace bweso-system
 
   docker:
     name: Docker

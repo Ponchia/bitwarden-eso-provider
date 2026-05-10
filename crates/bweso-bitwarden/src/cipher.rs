@@ -1,8 +1,8 @@
 //! Bitwarden-compatible cipher response models and field extraction.
 
+use bweso_core::SecretDocument;
 use serde::Deserialize;
 use thiserror::Error;
-use vwso_core::SecretDocument;
 use zeroize::Zeroize;
 
 use crate::crypto::{AuthenticatedSymmetricKey, CryptoError, EncryptedString};
@@ -308,13 +308,13 @@ impl DecryptedCipher {
         if let Some(name) = &self.name {
             document
                 .metadata
-                .insert("vaultwarden.name".to_string(), name.clone());
+                .insert("bitwarden.name".to_string(), name.clone());
         }
         document
             .metadata
-            .insert("vaultwarden.cipherId".to_string(), self.id.clone());
+            .insert("bitwarden.cipherId".to_string(), self.id.clone());
         document.metadata.insert(
-            "vaultwarden.cipherType".to_string(),
+            "bitwarden.cipherType".to_string(),
             self.cipher_type.to_string(),
         );
 
