@@ -16,6 +16,9 @@
 - Provider pod to Bitwarden-compatible HTTPS endpoint.
 - Provider memory and local cache.
 - Kubernetes Secret storage and etcd encryption.
+- ESO to provider webhook traffic. The default Helm chart exposes a ClusterIP
+  HTTP service for ESO; this hop carries resolved secret values and relies on
+  Kubernetes network isolation, bearer-token auth, and optional NetworkPolicy.
 
 ## Initial Attacker Capabilities
 
@@ -28,6 +31,9 @@
 ## Security Requirements
 
 - TLS verification is mandatory by default.
+- The provider Service must stay cluster-internal unless it is placed behind a
+  TLS or mTLS terminating mesh, ingress, or gateway. Use that protected HTTPS
+  endpoint for the ESO webhook URL when pod-network traffic is not trusted.
 - The provider must not expose vault item IDs, item names, requested properties,
   secret values, decrypted vault content, API tokens, master passwords, or
   derived keys through logs, metrics, or public error responses.

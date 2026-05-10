@@ -91,6 +91,20 @@ jobs:
           exit-code: "1"
           ignore-unfixed: true
 
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: security-cargo-deny
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --version 0.19.5 --locked
+
+      - name: Cargo advisory and license policy
+        run: cargo deny --locked check advisories licenses bans sources
+
       - name: Install Checkov
         run: python -m pip install --upgrade checkov
 

@@ -366,7 +366,7 @@ pub enum CipherError {
         /// Cipher identifier.
         id: String,
     },
-    /// Attachment download and decryption is not implemented in this release.
+    /// Attachment download and decryption is intentionally out of scope for this release.
     #[error("Bitwarden attachment extraction is not supported by this provider release")]
     UnsupportedAttachment,
 }

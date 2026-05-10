@@ -18,5 +18,7 @@
 /coverage/
 /tarpaulin-report.html
 /junit.xml
+/.aider.tags.cache.v4/
 /.playwright-cli/
+/.scannerwork/
 /.semgrep/

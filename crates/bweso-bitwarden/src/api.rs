@@ -360,44 +360,40 @@ impl BitwardenApiClient {
         key: &str,
     ) -> Result<DecryptedCipher, BitwardenClientError> {
         match CipherLookup::from_key(key) {
-            CipherLookup::Id(id) => {
-                let cipher = sync
-                    .ciphers
-                    .iter()
-                    .find(|cipher| cipher.id == id)
-                    .ok_or(BitwardenApiError::CipherNotFound)?;
-                if cipher.organization_id.is_some() {
-                    return Err(BitwardenApiError::UnsupportedSharedItem.into());
-                }
-                return cipher.decrypt(user_key).map_err(BitwardenClientError::from);
-            }
-            CipherLookup::Name(name) => {
-                return Self::resolve_synced_cipher_by_name(sync, user_key, name)
-            }
-            CipherLookup::IdThenName => {}
-        }
-
-        let mut name_match = None;
-
-        for cipher in &sync.ciphers {
-            if cipher.id == key {
-                if cipher.organization_id.is_some() {
-                    return Err(BitwardenApiError::UnsupportedSharedItem.into());
-                }
-                return Ok(cipher.decrypt(user_key)?);
-            }
-
-            if let Ok(decrypted) = cipher.decrypt(user_key) {
-                if decrypted.name.as_deref() == Some(key) {
-                    if name_match.is_some() {
-                        return Err(BitwardenApiError::AmbiguousCipherName.into());
+            CipherLookup::Id(id) => Self::resolve_synced_cipher_by_id(sync, user_key, id),
+            CipherLookup::Name(name) => Self::resolve_synced_cipher_by_name(sync, user_key, name),
+            CipherLookup::IdThenName => {
+                match Self::resolve_synced_cipher_by_id(sync, user_key, key) {
+                    Ok(cipher) => Ok(cipher),
+                    Err(BitwardenClientError::Api(BitwardenApiError::CipherNotFound)) => {
+                        Self::resolve_synced_cipher_by_name(sync, user_key, key)
                     }
-                    name_match = Some(decrypted);
+                    Err(error) => Err(error),
                 }
             }
         }
+    }
 
-        name_match.ok_or_else(|| BitwardenApiError::CipherNotFound.into())
+    fn resolve_synced_cipher_by_id(
+        sync: &SyncResponse,
+        user_key: &AuthenticatedSymmetricKey,
+        id: &str,
+    ) -> Result<DecryptedCipher, BitwardenClientError> {
+        let cipher = Self::find_cipher_by_id(sync, id)?;
+        if cipher.organization_id.is_some() {
+            return Err(BitwardenApiError::UnsupportedSharedItem.into());
+        }
+        cipher.decrypt(user_key).map_err(BitwardenClientError::from)
+    }
+
+    fn find_cipher_by_id<'a>(
+        sync: &'a SyncResponse,
+        id: &str,
+    ) -> Result<&'a EncryptedCipher, BitwardenApiError> {
+        sync.ciphers
+            .iter()
+            .find(|cipher| cipher.id == id)
+            .ok_or(BitwardenApiError::CipherNotFound)
     }
 
     fn resolve_synced_cipher_by_name(
@@ -559,10 +555,8 @@ struct CacheMetricState {
 
 impl CacheMetricState {
     fn record_last_success_now(&self) {
-        let now = unix_now_seconds();
-        if now > 0 {
-            self.last_success_unix_seconds.store(now, Ordering::Relaxed);
-        }
+        self.last_success_unix_seconds
+            .store(unix_now_seconds(), Ordering::Relaxed);
     }
 
     fn snapshot(&self) -> BitwardenCacheMetrics {
@@ -1274,6 +1268,52 @@ mod tests {
         client.resolve(selector.clone()).await?;
         client.resolve(selector).await?;
 
+        assert_eq!(counters.token_requests(), 1);
+        assert_eq!(counters.sync_requests(), 1);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cache_metrics_track_refreshes_hits_and_last_success() -> TestResult {
+        let (client, counters) =
+            fake_client_with_cache(BitwardenCacheConfig::new(Duration::from_secs(60))).await?;
+        let selector = BitwardenSelector::try_from(RemoteRef {
+            key: "app/database".to_string(),
+            property: Some("DATABASE_URL".to_string()),
+            version: None,
+        })?;
+
+        let initial = client
+            .cache_metrics()
+            .ok_or("Bitwarden API client should expose cache metrics")?;
+        assert_eq!(initial.cache_hits, 0);
+        assert_eq!(initial.refresh_successes, 0);
+        assert_eq!(initial.refresh_failures, 0);
+        assert_eq!(initial.last_success_unix_seconds, None);
+        assert_eq!(initial.last_success_age_seconds, None);
+
+        client.resolve(selector.clone()).await?;
+        let after_refresh = client
+            .cache_metrics()
+            .ok_or("Bitwarden API client should expose cache metrics")?;
+        let refresh_timestamp = after_refresh
+            .last_success_unix_seconds
+            .ok_or("successful refresh should record a timestamp")?;
+        assert!(refresh_timestamp > 1_600_000_000);
+        assert_eq!(after_refresh.cache_hits, 0);
+        assert_eq!(after_refresh.refresh_successes, 1);
+        assert_eq!(after_refresh.refresh_failures, 0);
+        assert!(after_refresh.last_success_age_seconds.is_some());
+
+        client.resolve(selector).await?;
+        let after_hit = client
+            .cache_metrics()
+            .ok_or("Bitwarden API client should expose cache metrics")?;
+        assert_eq!(after_hit.cache_hits, 1);
+        assert_eq!(after_hit.refresh_successes, 1);
+        assert_eq!(after_hit.refresh_failures, 0);
+        assert_eq!(after_hit.last_success_unix_seconds, Some(refresh_timestamp));
+        assert!(after_hit.last_success_age_seconds.is_some());
         assert_eq!(counters.token_requests(), 1);
         assert_eq!(counters.sync_requests(), 1);
         Ok(())

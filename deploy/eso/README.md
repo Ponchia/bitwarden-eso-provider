@@ -22,6 +22,14 @@ The Helm chart leaves NetworkPolicy disabled by default. Enable
 `networkPolicy.enabled` only after adapting one of these examples to the exact
 DNS, ingress, Vaultwarden, ESO, and Prometheus paths in your cluster.
 
+ESO receives resolved secret values from the provider webhook. The default
+examples use the provider's in-cluster HTTP `ClusterIP` Service plus a bearer
+token. Keep that Service private to the cluster. Use RBAC to restrict who can
+read webhook tokens or create stores, and use NetworkPolicy, mesh, ingress, or
+gateway policy to restrict network reachability. If pod-network traffic is not a
+trusted boundary, front the provider with TLS/mTLS and use that HTTPS URL in the
+`SecretStore`.
+
 Prefer one dedicated Bitwarden/Vaultwarden user and one namespace-local
 `SecretStore` per trust boundary. Namespace-local `SecretStore` resources read
 webhook auth from a same-namespace token Secret such as `bweso-webhook-auth`;

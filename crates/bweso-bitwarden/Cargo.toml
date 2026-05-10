@@ -29,7 +29,7 @@ sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 url.workspace = true
-bweso-core = { path = "../bweso-core" }
+bweso-core = { version = "0.1.0", path = "../bweso-core" }
 zeroize.workspace = true
 
 [dev-dependencies]

@@ -92,6 +92,10 @@ standard ESO-managed Kubernetes Secrets.
   target namespaces or Secret names.
 - No Bitwarden, Vaultwarden, 1Password, or Kubernetes source code is vendored.
 - TLS verification is on by default. HTTP is accepted only for localhost tests.
+- The default Kubernetes Service is cluster-internal HTTP for ESO. Because the
+  webhook response contains secret values, keep it private, use the bearer
+  token and NetworkPolicy, and front it with TLS/mTLS when pod-network traffic
+  is not a trusted boundary.
 - Logs must not contain secret values, master passwords, API tokens, or derived
   keys.
 - Restarts and target Secret recreation use Kubernetes-native behavior.

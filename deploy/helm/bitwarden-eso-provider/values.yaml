@@ -131,6 +131,9 @@ metrics:
 extraEnv: []
 
 resources:
+  # PBKDF2-backed accounts usually fit these small defaults. Argon2id accounts
+  # may need memory limits near their configured Argon2 memory cost plus
+  # operational headroom.
   requests:
     cpu: 25m
     memory: 64Mi

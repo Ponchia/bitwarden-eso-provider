@@ -103,6 +103,14 @@ spec:
       timeout: 10s
 ```
 
+The webhook response contains the resolved secret value. The chart exposes the
+provider as an in-cluster `ClusterIP` HTTP service, so this hop relies on
+Kubernetes network isolation plus the bearer token. Do not expose the provider
+Service outside the cluster. For clusters where pod-network traffic is not a
+trusted boundary, put this service behind a mesh, ingress, or gateway that
+terminates TLS/mTLS, and point the ESO webhook URL at that protected HTTPS
+endpoint instead.
+
 Then create `ExternalSecret` resources that select item IDs/names and
 properties. Prefer `id:<item-id>` selectors. `name:<item-name>` is supported for
 operator convenience, and bare selectors currently try ID first then item name
@@ -165,3 +173,12 @@ helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
 
 See [`../operations/observability.md`](../operations/observability.md) for the
 full metric list and operational notes.
+
+## Resource Sizing
+
+The default chart resources are intentionally small and are suitable for
+PBKDF2-backed accounts plus low-throughput sync. Bitwarden Argon2id accounts
+can require substantially more memory during unlock. If the provider exits
+during unlock or Kubernetes reports OOM kills, raise `resources.requests.memory`
+and `resources.limits.memory` to match the account's configured Argon2 memory
+cost with operational headroom.

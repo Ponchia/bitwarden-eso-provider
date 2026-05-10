@@ -25,8 +25,8 @@ tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 url.workspace = true
-bweso-core = { path = "../bweso-core" }
-bweso-bitwarden = { path = "../bweso-bitwarden" }
+bweso-core = { version = "0.1.0", path = "../bweso-core" }
+bweso-bitwarden = { version = "0.1.0", path = "../bweso-bitwarden" }
 
 [dev-dependencies]
 async-trait.workspace = true
