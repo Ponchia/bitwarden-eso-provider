@@ -10,6 +10,9 @@ The default chart shape is intentionally small:
   objects.
 - No dashboard by default.
 - Existing Kubernetes Secret for credentials by default.
+- Startup, liveness, and readiness probes enabled by default.
+- Prometheus metrics exposed by the pod, with optional `ServiceMonitor`
+  rendering when Prometheus Operator CRDs are installed.
 - Optional NetworkPolicy template.
 
 Render it locally with non-secret lint values:

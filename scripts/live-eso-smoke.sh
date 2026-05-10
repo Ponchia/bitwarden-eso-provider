@@ -57,6 +57,7 @@ require_cmd kubectl
 require_cmd helm
 require_cmd jq
 require_cmd cargo
+require_cmd curl
 
 namespace="$(first_env BWESO_E2E_NAMESPACE || true)"
 namespace="${namespace:-bweso-live-smoke}"
@@ -101,7 +102,18 @@ fi
 [[ -n "${master_password}" ]] || fail "set BWESO_TEST_MASTER_PASSWORD or BWESO_MASTER_PASSWORD"
 
 tmp_dir="$(mktemp -d)"
+port_forward_pid=""
+local_port=""
+stop_port_forward() {
+  if [[ -n "${port_forward_pid}" ]]; then
+    kill "${port_forward_pid}" >/dev/null 2>&1 || true
+    wait "${port_forward_pid}" >/dev/null 2>&1 || true
+    port_forward_pid=""
+  fi
+}
+
 cleanup() {
+  stop_port_forward
   rm -rf "${tmp_dir}"
   if [[ "${cleanup_namespace}" == true ]]; then
     log "cleaning namespace ${namespace}"
@@ -163,6 +175,8 @@ item_key="$(jq -r '.key // empty' "${selector_file}")"
 property="$(jq -r '.property // empty' "${selector_file}")"
 [[ -n "${item_key}" ]] || fail "selector must contain .key"
 [[ -n "${property}" ]] || fail "selector must contain .property for ESO jsonPath extraction"
+missing_property="__bweso_missing_property_$(date +%s)"
+missing_item="__bweso_missing_item_$(date +%s)"
 
 log "creating namespace ${namespace}"
 "${kubectl_cmd[@]}" create namespace "${namespace}" --dry-run=client -o yaml | "${kubectl_cmd[@]}" apply -f - >/dev/null
@@ -221,6 +235,78 @@ log "waiting for webhook rollout"
 
 service_name="$("${kubectl_cmd[@]}" -n "${namespace}" get svc -l "${selector}" -o jsonpath='{.items[0].metadata.name}')"
 [[ -n "${service_name}" ]] || fail "could not find webhook Service"
+
+start_port_forward() {
+  stop_port_forward
+  local_port=$((18080 + RANDOM % 1000))
+  port_forward_log="${tmp_dir}/port-forward-${local_port}.log"
+  "${kubectl_cmd[@]}" -n "${namespace}" port-forward --address 127.0.0.1 "svc/${service_name}" \
+    "${local_port}:8080" >"${port_forward_log}" 2>&1 &
+  port_forward_pid="$!"
+}
+
+wait_for_probe() {
+  local path="$1"
+  local expected="$2"
+  local deadline=$((SECONDS + 60))
+  local status
+  while (( SECONDS < deadline )); do
+    status="$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${local_port}${path}" || true)"
+    if [[ "${status}" == "${expected}" ]]; then
+      return 0
+    fi
+    if ! kill -0 "${port_forward_pid}" >/dev/null 2>&1; then
+      fail "port-forward to webhook Service exited before ${path} became reachable"
+    fi
+    sleep 1
+  done
+  fail "webhook probe ${path} did not return HTTP ${expected}"
+}
+
+fetch_metrics() {
+  local output_file="$1"
+  local deadline=$((SECONDS + 60))
+  while (( SECONDS < deadline )); do
+    if curl -fsS "http://127.0.0.1:${local_port}/metrics" >"${output_file}"; then
+      return 0
+    fi
+    if ! kill -0 "${port_forward_pid}" >/dev/null 2>&1; then
+      start_port_forward
+    fi
+    sleep 1
+  done
+  fail "metrics endpoint did not return a successful response"
+}
+
+record_direct_metric_observations() {
+  local success_body="${tmp_dir}/resolve-success-request.json"
+  local success_response="${tmp_dir}/resolve-success-response.json"
+  local error_body="${tmp_dir}/resolve-error-request.json"
+  local status
+
+  jq -n --arg key "${item_key}" --arg property "${property}" \
+    '{remoteRef: {key: $key, property: $property}}' >"${success_body}"
+  curl -fsS \
+    -H 'Content-Type: application/json' \
+    -o "${success_response}" \
+    -d @"${success_body}" \
+    "http://127.0.0.1:${local_port}/v1/resolve" >/dev/null
+
+  jq -n --arg key "${item_key}" --arg property "${missing_property}" \
+    '{remoteRef: {key: $key, property: $property}}' >"${error_body}"
+  status="$(curl -sS \
+    -H 'Content-Type: application/json' \
+    -o /dev/null \
+    -w '%{http_code}' \
+    -d @"${error_body}" \
+    "http://127.0.0.1:${local_port}/v1/resolve" || true)"
+  [[ "${status}" == "404" ]] || fail "direct missing-property resolve returned HTTP ${status}, expected 404"
+}
+
+start_port_forward
+log "checking webhook probes"
+wait_for_probe /livez 204
+wait_for_probe /readyz 204
 
 cat >"${tmp_dir}/eso.yaml" <<EOF
 apiVersion: external-secrets.io/v1
@@ -286,7 +372,7 @@ spec:
     - secretKey: resolved
       remoteRef:
         key: "${item_key}"
-        property: "__bweso_missing_property_$(date +%s)"
+        property: "${missing_property}"
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
@@ -306,7 +392,7 @@ spec:
   data:
     - secretKey: resolved
       remoteRef:
-        key: "__bweso_missing_item_$(date +%s)"
+        key: "${missing_item}"
         property: "${property}"
 EOF
 
@@ -376,6 +462,28 @@ if "${kubectl_cmd[@]}" -n "${namespace}" get secret bweso-missing-property-secre
 fi
 if "${kubectl_cmd[@]}" -n "${namespace}" get secret bweso-missing-item-secret >/dev/null 2>&1; then
   fail "missing-item ExternalSecret unexpectedly created a target Secret"
+fi
+
+log "checking redacted metrics endpoint"
+start_port_forward
+wait_for_probe /livez 204
+wait_for_probe /readyz 204
+record_direct_metric_observations
+metrics_file="${tmp_dir}/metrics.txt"
+fetch_metrics "${metrics_file}"
+grep -Fq 'bweso_ready 1' "${metrics_file}" || fail "metrics did not report ready state"
+grep -Fq 'bweso_http_requests_total' "${metrics_file}" || fail "metrics did not include HTTP counters"
+grep -Fq 'bweso_resolve_requests_total' "${metrics_file}" || fail "metrics did not include resolution counters"
+grep -Fq 'outcome="success"' "${metrics_file}" || fail "metrics did not include successful resolution outcomes"
+grep -Fq 'outcome="error"' "${metrics_file}" || fail "metrics did not include expected error outcomes"
+if [[ "${#item_key}" -ge 8 ]] && grep -Fq "${item_key}" "${metrics_file}"; then
+  fail "metrics leaked selected vault item key"
+fi
+if grep -Fq "${missing_property}" "${metrics_file}"; then
+  fail "metrics leaked missing-property selector"
+fi
+if grep -Fq "${missing_item}" "${metrics_file}"; then
+  fail "metrics leaked missing-item selector"
 fi
 
 log "live ESO smoke test passed"

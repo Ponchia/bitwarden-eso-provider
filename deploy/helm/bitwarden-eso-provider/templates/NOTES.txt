@@ -5,3 +5,11 @@ Create an External Secrets Operator SecretStore that points to:
   http://{{ include "bweso.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/v1/resolve
 
 Example SecretStore and ExternalSecret manifests are in deploy/eso.
+
+Health and metrics endpoints:
+
+  http://{{ include "bweso.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/livez
+  http://{{ include "bweso.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/readyz
+  http://{{ include "bweso.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}{{ .Values.metrics.path }}
+
+Set metrics.serviceMonitor.enabled=true when Prometheus Operator CRDs are installed.

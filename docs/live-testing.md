@@ -66,12 +66,13 @@ by this project. Do not run live tests against a personal daily-use account.
 `scripts/live-eso-smoke.sh` deploys the Helm chart into a temporary namespace,
 creates a namespace-local `SecretStore`, syncs an `ExternalSecret`, verifies
 target Secret recreation, restarts the webhook Deployment, forces another sync,
-and checks expected error cases for missing items/properties. It does not print
-decrypted values.
+checks expected error cases for missing items/properties, and verifies `/livez`,
+`/readyz`, `/metrics`, successful/error metrics, and metric redaction. It does
+not print decrypted values.
 
 Required:
 
-- `kubectl`, `helm`, `jq`, and `cargo`.
+- `kubectl`, `helm`, `jq`, `curl`, and `cargo`.
 - External Secrets Operator already installed in the target cluster.
 - A pushed image tag for the webhook.
 - Live test credentials through the `BWESO_TEST_*` variables above, or the

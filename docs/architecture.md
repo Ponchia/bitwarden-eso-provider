@@ -26,7 +26,8 @@ This project should own:
 - Master-password user-key unlock.
 - Bitwarden and Vaultwarden API-key login and sync.
 - Provider-level caching and rate limiting.
-- Redacted logs, metrics, and health checks.
+- Redacted JSON logs, Prometheus metrics, Kubernetes health probes, and graceful
+  shutdown readiness behavior.
 - A small HTTP contract usable by ESO's generic webhook provider.
 
 This project should not own initially:

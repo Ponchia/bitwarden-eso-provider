@@ -17,6 +17,8 @@ serviceAccount:
 
 podAnnotations: {}
 podLabels: {}
+priorityClassName: ""
+terminationGracePeriodSeconds: 30
 
 podSecurityContext:
   runAsNonRoot: true
@@ -68,6 +70,45 @@ credentials:
 logging:
   rustLog: info,tower_http=info
 
+probes:
+  startup:
+    enabled: true
+    httpGet:
+      path: /livez
+      port: http
+    failureThreshold: 30
+    periodSeconds: 2
+    timeoutSeconds: 1
+  liveness:
+    enabled: true
+    httpGet:
+      path: /livez
+      port: http
+    failureThreshold: 3
+    periodSeconds: 10
+    timeoutSeconds: 1
+  readiness:
+    enabled: true
+    httpGet:
+      path: /readyz
+      port: http
+    failureThreshold: 3
+    periodSeconds: 5
+    timeoutSeconds: 1
+
+metrics:
+  path: /metrics
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    labels: {}
+    annotations: {}
+    interval: 30s
+    scrapeTimeout: 10s
+    honorLabels: false
+    relabelings: []
+    metricRelabelings: []
+
 extraEnv: []
 
 resources: {}
@@ -75,6 +116,7 @@ resources: {}
 nodeSelector: {}
 tolerations: []
 affinity: {}
+topologySpreadConstraints: []
 
 networkPolicy:
   enabled: false

@@ -1,11 +1,17 @@
 #![forbid(unsafe_code)]
 
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    net::SocketAddr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use anyhow::{bail, Context};
 use axum::{
-    extract::State,
-    response::IntoResponse,
+    body::Body,
+    extract::{MatchedPath, State},
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -16,10 +22,16 @@ use bweso_bitwarden::{
 };
 use bweso_core::{require_non_empty, RemoteRef, SecretDocument};
 use clap::Parser;
-use http::StatusCode;
+use http::{header, Request, StatusCode};
 use serde::{Deserialize, Serialize};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+
+mod lifecycle;
+mod metrics;
+
+use lifecycle::Lifecycle;
+use metrics::{AppMetrics, PROMETHEUS_CONTENT_TYPE};
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -59,6 +71,8 @@ struct Args {
 #[derive(Clone)]
 struct AppState {
     provider: Arc<dyn BitwardenProvider>,
+    metrics: Arc<AppMetrics>,
+    lifecycle: Lifecycle,
 }
 
 #[derive(Debug, Deserialize)]
@@ -78,9 +92,12 @@ async fn main() -> anyhow::Result<()> {
     init_tracing();
     let args = Args::parse();
     let listen = args.listen;
+    let lifecycle = Lifecycle::default();
 
     let state = AppState {
         provider: provider_from_args(args)?,
+        metrics: Arc::new(AppMetrics::new()),
+        lifecycle: lifecycle.clone(),
     };
 
     let app = build_router(state);
@@ -88,7 +105,9 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(listen).await?;
     tracing::info!(address = %listen, "starting ESO webhook provider");
 
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal(lifecycle))
+        .await?;
 
     Ok(())
 }
@@ -143,9 +162,17 @@ fn endpoints_from_args(args: &Args) -> anyhow::Result<BitwardenEndpoints> {
 }
 
 fn build_router(state: AppState) -> Router {
+    let middleware_state = state.clone();
+
     Router::new()
-        .route("/healthz", get(healthz))
+        .route("/livez", get(livez))
+        .route("/readyz", get(readyz))
+        .route("/metrics", get(metrics))
         .route("/v1/resolve", post(resolve))
+        .layer(middleware::from_fn_with_state(
+            middleware_state,
+            record_http_metrics,
+        ))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -160,56 +187,162 @@ fn init_tracing() {
         .init();
 }
 
-async fn healthz() -> impl IntoResponse {
+async fn livez() -> impl IntoResponse {
     StatusCode::NO_CONTENT
+}
+
+async fn readyz(State(state): State<AppState>) -> impl IntoResponse {
+    if state.lifecycle.is_ready() {
+        StatusCode::NO_CONTENT
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    }
+}
+
+async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, PROMETHEUS_CONTENT_TYPE)],
+        state.metrics.render(state.lifecycle.is_ready()),
+    )
+}
+
+async fn record_http_metrics(
+    State(state): State<AppState>,
+    matched_path: Option<MatchedPath>,
+    request: Request<Body>,
+    next: Next,
+) -> Response {
+    let method = request.method().as_str().to_string();
+    let route = matched_path
+        .as_ref()
+        .map_or("unmatched", MatchedPath::as_str)
+        .to_string();
+    let started = Instant::now();
+    let response = next.run(request).await;
+    let status = response.status();
+
+    state
+        .metrics
+        .record_http_request(&method, &route, status, started.elapsed());
+
+    response
 }
 
 async fn resolve(
     State(state): State<AppState>,
     Json(request): Json<ResolveRequest>,
 ) -> Result<Json<SecretDocument>, (StatusCode, Json<ErrorResponse>)> {
-    let selector =
-        BitwardenSelector::try_from(request.remote_ref).map_err(|error| provider_error(&error))?;
-    let document = state
-        .provider
-        .resolve(selector)
-        .await
-        .map_err(|error| provider_error(&error))?;
+    let started = Instant::now();
+    let selector = match BitwardenSelector::try_from(request.remote_ref) {
+        Ok(selector) => selector,
+        Err(error) => {
+            let (status, error_kind) = provider_status_and_kind(&error);
+            state
+                .metrics
+                .record_resolve_request(status, "error", error_kind, started.elapsed());
+            return Err(provider_error(&error));
+        }
+    };
 
-    Ok(Json(document))
+    match state.provider.resolve(selector).await {
+        Ok(document) => {
+            state.metrics.record_resolve_request(
+                StatusCode::OK,
+                "success",
+                "none",
+                started.elapsed(),
+            );
+            Ok(Json(document))
+        }
+        Err(error) => {
+            let (status, error_kind) = provider_status_and_kind(&error);
+            state
+                .metrics
+                .record_resolve_request(status, "error", error_kind, started.elapsed());
+            Err(provider_error(&error))
+        }
+    }
 }
 
 fn provider_error(error: &BitwardenClientError) -> (StatusCode, Json<ErrorResponse>) {
     let message = error.to_string();
-    let status = match error {
+    let (status, _) = provider_status_and_kind(error);
+
+    (status, Json(ErrorResponse { error: message }))
+}
+
+fn provider_status_and_kind(error: &BitwardenClientError) -> (StatusCode, &'static str) {
+    match error {
         BitwardenClientError::Validation(_)
-        | BitwardenClientError::Cipher(CipherError::BlankProperty) => StatusCode::BAD_REQUEST,
+        | BitwardenClientError::Cipher(CipherError::BlankProperty) => {
+            (StatusCode::BAD_REQUEST, "validation")
+        }
         BitwardenClientError::Cipher(CipherError::MissingProperty { .. })
         | BitwardenClientError::Api(BitwardenApiError::CipherNotFound { .. }) => {
-            StatusCode::NOT_FOUND
+            (StatusCode::NOT_FOUND, "not_found")
         }
-        BitwardenClientError::Api(
-            BitwardenApiError::Http(_) | BitwardenApiError::HttpStatus { .. },
-        ) => StatusCode::BAD_GATEWAY,
+        BitwardenClientError::Api(BitwardenApiError::Http(_)) => {
+            (StatusCode::BAD_GATEWAY, "upstream_http")
+        }
+        BitwardenClientError::Api(BitwardenApiError::HttpStatus { .. }) => {
+            (StatusCode::BAD_GATEWAY, "upstream_status")
+        }
         BitwardenClientError::Crypto(_)
         | BitwardenClientError::Cipher(
             CipherError::Crypto(_) | CipherError::NoExtractableFields { .. },
-        )
-        | BitwardenClientError::KeyDerivation(_)
-        | BitwardenClientError::Api(
-            BitwardenApiError::InvalidBaseUrl
-            | BitwardenApiError::UnsupportedKdfType { .. }
-            | BitwardenApiError::MissingKdfParameter { .. }
-            | BitwardenApiError::MissingMasterPasswordUnlock
+        ) => (StatusCode::INTERNAL_SERVER_ERROR, "crypto"),
+        BitwardenClientError::KeyDerivation(_) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, "key_derivation")
+        }
+        BitwardenClientError::Api(
+            BitwardenApiError::UnsupportedKdfType { .. }
+            | BitwardenApiError::MissingKdfParameter { .. },
+        ) => (StatusCode::INTERNAL_SERVER_ERROR, "kdf_parameters"),
+        BitwardenClientError::Api(
+            BitwardenApiError::MissingMasterPasswordUnlock
             | BitwardenApiError::MissingMasterKeyWrappedUserKey
             | BitwardenApiError::MissingCachedSync,
-        )
+        ) => (StatusCode::INTERNAL_SERVER_ERROR, "sync_payload"),
+        BitwardenClientError::Api(BitwardenApiError::InvalidBaseUrl)
         | BitwardenClientError::InvalidEndpoint { .. }
-        | BitwardenClientError::InsecureEndpoint => StatusCode::INTERNAL_SERVER_ERROR,
-        BitwardenClientError::NotImplemented { .. } => StatusCode::NOT_IMPLEMENTED,
+        | BitwardenClientError::InsecureEndpoint => (StatusCode::INTERNAL_SERVER_ERROR, "endpoint"),
+        BitwardenClientError::NotImplemented { .. } => {
+            (StatusCode::NOT_IMPLEMENTED, "not_implemented")
+        }
+    }
+}
+
+async fn shutdown_signal(lifecycle: Lifecycle) {
+    let ctrl_c = async {
+        if let Err(error) = tokio::signal::ctrl_c().await {
+            tracing::error!(%error, "failed to install Ctrl-C signal handler");
+            std::future::pending::<()>().await;
+        }
     };
 
-    (status, Json(ErrorResponse { error: message }))
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut signal) => {
+                signal.recv().await;
+            }
+            Err(error) => {
+                tracing::error!(%error, "failed to install SIGTERM signal handler");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        () = ctrl_c => {},
+        () = terminate => {},
+    }
+
+    lifecycle.mark_shutting_down();
+    tracing::info!("shutdown signal received; terminating HTTP server");
 }
 
 #[cfg(test)]
@@ -238,7 +371,15 @@ mod tests {
     }
 
     fn test_app(provider: Arc<dyn BitwardenProvider>) -> Router {
-        build_router(AppState { provider })
+        build_router(test_state(provider))
+    }
+
+    fn test_state(provider: Arc<dyn BitwardenProvider>) -> AppState {
+        AppState {
+            provider,
+            metrics: Arc::new(AppMetrics::new()),
+            lifecycle: Lifecycle::default(),
+        }
     }
 
     fn valid_args() -> Args {
@@ -329,12 +470,34 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn healthz_returns_no_content() -> TestResult {
-        let response = test_app(Arc::new(StaticProvider))
-            .oneshot(Request::builder().uri("/healthz").body(Body::empty())?)
+    async fn livez_and_readyz_return_no_content() -> TestResult {
+        let app = test_app(Arc::new(StaticProvider));
+
+        let response = app
+            .clone()
+            .oneshot(Request::builder().uri("/livez").body(Body::empty())?)
             .await?;
 
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let response = app
+            .oneshot(Request::builder().uri("/readyz").body(Body::empty())?)
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn readyz_returns_unavailable_while_shutting_down() -> TestResult {
+        let state = test_state(Arc::new(StaticProvider));
+        state.lifecycle.mark_shutting_down();
+
+        let response = build_router(state)
+            .oneshot(Request::builder().uri("/readyz").body(Body::empty())?)
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         Ok(())
     }
 
@@ -361,6 +524,53 @@ mod tests {
             document.data.get("DATABASE_URL"),
             Some(&"resolved-secret".to_string())
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn metrics_exports_redacted_http_and_resolve_series() -> TestResult {
+        let app = test_app(Arc::new(StaticProvider));
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/v1/resolve")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        r#"{"remoteRef":{"key":"app/database","property":"DATABASE_URL"}}"#,
+                    ))?,
+            )
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let response = app
+            .oneshot(Request::builder().uri("/metrics").body(Body::empty())?)
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get(header::CONTENT_TYPE),
+            Some(&header::HeaderValue::from_static(PROMETHEUS_CONTENT_TYPE))
+        );
+
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let body = std::str::from_utf8(&body)?;
+
+        assert!(body.contains("bweso_build_info{version=\""));
+        assert!(body.contains("bweso_ready 1"));
+        assert!(body.contains("# TYPE bweso_http_requests_total counter"));
+        assert!(body.contains(
+            "bweso_http_requests_total{method=\"POST\",route=\"/v1/resolve\",status=\"200\"} 1"
+        ));
+        assert!(body.contains("# TYPE bweso_resolve_requests_total counter"));
+        assert!(body.contains(
+            "bweso_resolve_requests_total{outcome=\"success\",error_kind=\"none\",status=\"200\"} 1"
+        ));
+        assert!(!body.contains("app/database"));
+        assert!(!body.contains("DATABASE_URL"));
         Ok(())
     }
 

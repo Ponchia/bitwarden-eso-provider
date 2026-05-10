@@ -41,6 +41,8 @@ tagged release.
 - Local encrypted string and vault item decryption.
 - Whole-item extraction or one-field extraction through ESO `remoteRef`.
 - In-memory sync cache with explicit TTL and single-flight refresh behavior.
+- Dedicated `/livez`, `/readyz`, and `/metrics` endpoints with redacted
+  Prometheus-format runtime, HTTP, and resolution metrics.
 - Helm chart, ESO manifests, live smoke test script, architecture notes, threat
   model, and release checklist.
 
@@ -120,6 +122,8 @@ Then create an ESO `SecretStore` and `ExternalSecret` using the examples under
 [`deploy/eso`](deploy/eso).
 
 Compatibility details are in [`docs/compatibility.md`](docs/compatibility.md).
+Operational metrics and probe details are in
+[`docs/operations/observability.md`](docs/operations/observability.md).
 Live smoke-test instructions are in [`docs/live-testing.md`](docs/live-testing.md).
 
 ## License

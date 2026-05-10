@@ -65,3 +65,34 @@ spec:
 
 Then create `ExternalSecret` resources that select item IDs/names and
 properties. See [`../../deploy/eso`](../../deploy/eso) for examples.
+
+The chart configures startup, liveness, and readiness probes by default:
+
+```yaml
+probes:
+  startup:
+    httpGet:
+      path: /livez
+      port: http
+  liveness:
+    httpGet:
+      path: /livez
+      port: http
+  readiness:
+    httpGet:
+      path: /readyz
+      port: http
+```
+
+The provider always serves Prometheus-format metrics at `/metrics`. If the
+Prometheus Operator CRDs are installed, enable a `ServiceMonitor`:
+
+```bash
+helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
+  --namespace bweso-system \
+  --reuse-values \
+  --set metrics.serviceMonitor.enabled=true
+```
+
+See [`../operations/observability.md`](../operations/observability.md) for the
+full metric list and operational notes.

@@ -21,7 +21,7 @@ Initial notes on authenticated encrypted string handling live in
 - Wire runtime configuration into `bitwarden-eso-provider`.
 - Add cache with explicit TTL and single-flight refresh.
 - Add split Bitwarden Cloud endpoint support with fake-server coverage.
-- Add redacted metrics.
+- Add redacted metrics, health probes, and graceful shutdown readiness behavior.
 - Add a local CLI smoke-test command.
 - Add opt-in live Bitwarden-compatible smoke test.
 
@@ -34,6 +34,7 @@ Initial notes on authenticated encrypted string handling live in
 - Add Docker image and SBOM generation.
 - Add integration tests with local Vaultwarden and kind.
 - Add repeatable live k3s/ESO smoke script.
+- Add optional Prometheus Operator `ServiceMonitor` support.
 
 ## Phase 3: Kubernetes Ergonomics
 
