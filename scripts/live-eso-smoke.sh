@@ -45,6 +45,14 @@ first_env() {
   return 1
 }
 
+url_host() {
+  local raw="$1"
+  raw="${raw#*://}"
+  raw="${raw%%/*}"
+  raw="${raw%%:*}"
+  printf '%s' "${raw}"
+}
+
 kubectl_cmd=(kubectl)
 helm_cmd=(helm)
 kube_context="$(first_env BWESO_E2E_KUBE_CONTEXT KUBE_CONTEXT || true)"
@@ -91,6 +99,9 @@ api_url="$(first_env BWESO_TEST_API_URL BWESO_API_URL || true)"
 client_id="$(first_env BWESO_TEST_CLIENT_ID BWESO_CLIENT_ID || true)"
 client_secret="$(first_env BWESO_TEST_CLIENT_SECRET BWESO_CLIENT_SECRET || true)"
 master_password="$(first_env BWESO_TEST_MASTER_PASSWORD BWESO_MASTER_PASSWORD || true)"
+network_policy_enabled="$(first_env BWESO_E2E_NETWORK_POLICY_ENABLED || true)"
+host_alias_ip="$(first_env BWESO_E2E_HOST_ALIAS_IP || true)"
+host_alias_hostname="$(first_env BWESO_E2E_HOST_ALIAS_HOSTNAME || true)"
 
 if [[ -n "${single_origin_url}" && ( -n "${identity_url}" || -n "${api_url}" ) ]]; then
   fail "use either BWESO_TEST_SINGLE_ORIGIN_URL/BWESO_SINGLE_ORIGIN_URL or split identity/api URLs, not both"
@@ -101,6 +112,19 @@ fi
 [[ -n "${client_id}" ]] || fail "set BWESO_TEST_CLIENT_ID or BWESO_CLIENT_ID"
 [[ -n "${client_secret}" ]] || fail "set BWESO_TEST_CLIENT_SECRET or BWESO_CLIENT_SECRET"
 [[ -n "${master_password}" ]] || fail "set BWESO_TEST_MASTER_PASSWORD or BWESO_MASTER_PASSWORD"
+if [[ -n "${network_policy_enabled}" ]]; then
+  case "${network_policy_enabled}" in
+    true | false) ;;
+    *) fail "BWESO_E2E_NETWORK_POLICY_ENABLED must be true or false" ;;
+  esac
+fi
+if [[ -n "${host_alias_ip}" && -z "${host_alias_hostname}" ]]; then
+  [[ -n "${single_origin_url}" ]] || fail "set BWESO_E2E_HOST_ALIAS_HOSTNAME when using split endpoints"
+  host_alias_hostname="$(url_host "${single_origin_url}")"
+fi
+if [[ -z "${host_alias_ip}" && -n "${host_alias_hostname}" ]]; then
+  fail "set BWESO_E2E_HOST_ALIAS_IP when BWESO_E2E_HOST_ALIAS_HOSTNAME is set"
+fi
 
 tmp_dir="$(mktemp -d)"
 port_forward_pid=""
@@ -230,6 +254,16 @@ if [[ -n "${single_origin_url}" ]]; then
 else
   helm_args+=(--set-string "config.identityUrl=${identity_url}")
   helm_args+=(--set-string "config.apiUrl=${api_url}")
+fi
+if [[ -n "${network_policy_enabled}" ]]; then
+  helm_args+=(--set "networkPolicy.enabled=${network_policy_enabled}")
+fi
+if [[ -n "${host_alias_ip}" ]]; then
+  log "using host alias ${host_alias_hostname} -> ${host_alias_ip}"
+  helm_args+=(
+    --set-string "hostAliases[0].ip=${host_alias_ip}"
+    --set-string "hostAliases[0].hostnames[0]=${host_alias_hostname}"
+  )
 fi
 if [[ -n "${pull_secret}" ]]; then
   helm_args+=(--set-string "imagePullSecrets[0].name=${pull_secret}")

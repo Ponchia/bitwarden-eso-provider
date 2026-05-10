@@ -83,6 +83,14 @@ only the selected item and one deliberate missing item. That proves allowed
 selectors still sync and disallowed selectors fail with redacted `403`
 responses.
 
+The chart leaves NetworkPolicy disabled by default because egress to
+Vaultwarden, Bitwarden Cloud, DNS, ESO, and Prometheus is cluster-specific. Set
+`BWESO_E2E_NETWORK_POLICY_ENABLED=true` only when the chart values or cluster
+defaults already allow the selected backend path. For private ingress or
+split-horizon DNS, set `BWESO_E2E_HOST_ALIAS_IP` and optionally
+`BWESO_E2E_HOST_ALIAS_HOSTNAME`; when omitted, the hostname is inferred from the
+single-origin URL.
+
 The normal path is to push to `main`, let GitHub Actions build and publish the
 commit-tagged amd64 image, then run the smoke test with the 12-character commit
 tag. This avoids slow local `linux/amd64` Docker builds on Apple Silicon or
@@ -104,6 +112,10 @@ export BWESO_TEST_CLIENT_ID="user.<uuid>"
 export BWESO_TEST_CLIENT_SECRET="..."
 export BWESO_TEST_MASTER_PASSWORD="..."
 export BWESO_TEST_ALLOW_ANY_ITEM=true
+# Optional for private ingress/DNS paths:
+# export BWESO_E2E_HOST_ALIAS_IP="10.43.186.117"
+# Optional, inferred from BWESO_TEST_SINGLE_ORIGIN_URL when omitted:
+# export BWESO_E2E_HOST_ALIAS_HOSTNAME="vaultwarden.example.com"
 
 scripts/live-eso-smoke.sh
 ```

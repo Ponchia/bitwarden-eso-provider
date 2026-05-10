@@ -10,16 +10,7 @@ spec:
   policyTypes:
     - Egress
   egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: vaultwarden
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: vaultwarden
-      ports:
-        - protocol: TCP
-          port: 8080
+    # DNS. Adjust namespace/labels if your DNS pods are not in kube-system.
     - to:
         - namespaceSelector:
             matchLabels:
@@ -29,3 +20,29 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    # If the provider reaches Vaultwarden through an in-cluster ingress while
+    # preserving the public hostname for TLS/Host routing, allow that ingress.
+    # This example matches the default k3s Traefik labels.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 443
+    # If the provider reaches Vaultwarden directly, allow the Vaultwarden pods
+    # instead. Update the port to match your container port, commonly 80 or
+    # 8080 depending on the chart/image.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vaultwarden
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vaultwarden
+      ports:
+        - protocol: TCP
+          port: 80

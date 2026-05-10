@@ -16,8 +16,12 @@ The default chart shape is intentionally small:
 - Webhook bearer-token authentication enabled by default.
 - Optional provider-side selector policy with exact `remoteRef.key` allowlists
   and prefix allowlists.
-- Baseline resource requests/limits, seccomp, and NetworkPolicy enabled by
-  default. Tune egress rules for private Bitwarden or Vaultwarden endpoints.
+- Baseline resource requests/limits and seccomp by default.
+- Optional NetworkPolicy rendering. Enable it only after adapting ingress and
+  egress rules to your ESO, DNS, Bitwarden Cloud, or Vaultwarden path.
+- Optional `hostAliases` rendering for private DNS, split-horizon DNS, or
+  in-cluster ingress paths that must preserve the Bitwarden/Vaultwarden
+  hostname for TLS and HTTP host routing.
 
 Render it locally with non-secret lint values:
 

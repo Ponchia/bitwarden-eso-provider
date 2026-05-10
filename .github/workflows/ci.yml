@@ -50,13 +50,16 @@ jobs:
       - name: Render chart
         run: helm template bweso deploy/helm/bitwarden-eso-provider -f deploy/helm/lint-values.yaml --namespace bweso-system
 
-      - name: Render chart with selector policy
+      - name: Render chart with selector policy and network controls
         run: >
           helm template bweso deploy/helm/bitwarden-eso-provider
           -f deploy/helm/lint-values.yaml
           --namespace bweso-system
           --set-string 'selectorPolicy.allowedKeys[0]=id:example-item'
           --set-string 'selectorPolicy.allowedKeyPrefixes[0]=id:team-a/'
+          --set networkPolicy.enabled=true
+          --set-string 'hostAliases[0].ip=10.43.186.117'
+          --set-string 'hostAliases[0].hostnames[0]=vaultwarden.example.com'
 
   security:
     name: Security

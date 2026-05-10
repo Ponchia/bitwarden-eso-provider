@@ -46,6 +46,12 @@ helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
 Use `https://identity.bitwarden.eu` and `https://api.bitwarden.eu` for
 Bitwarden EU.
 
+`networkPolicy.enabled` is false by default. Enable it only after tailoring the
+ingress rules for ESO/Prometheus and the egress rules for DNS plus your
+Bitwarden/Vaultwarden backend. If the provider must reach an in-cluster ingress
+or private address while still using the public Vaultwarden hostname for TLS
+and HTTP host routing, configure `hostAliases`.
+
 `selectorPolicy.allowedKeys` and `selectorPolicy.allowedKeyPrefixes` are
 provider-side allowlists for the raw `remoteRef.key`. Empty lists allow all
 items visible to the configured account, which is acceptable only when the

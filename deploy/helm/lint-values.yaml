@@ -4,6 +4,14 @@ config:
 image:
   digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
 
+hostAliases:
+  - ip: 10.43.186.117
+    hostnames:
+      - vaultwarden.example.com
+
+networkPolicy:
+  enabled: true
+
 credentials:
   existingSecret:
     name: bweso-credentials

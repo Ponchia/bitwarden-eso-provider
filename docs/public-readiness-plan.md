@@ -31,10 +31,13 @@ Secrets Store CSI provider, and PushSecret support are later roadmap items.
   metadata lookup, download, decryption, and mapping are implemented.
 - Expose low-cardinality metrics for HTTP requests, resolve outcomes, cache
   hits, cache refreshes, and last successful cache refresh age/timestamp.
-- Ship Helm values and schema for selector policy.
+- Ship Helm values and schema for selector policy and pod `hostAliases`.
 - Provide examples for namespace-local `SecretStore`, warned
   `ClusterSecretStore`, common Kubernetes Secret types, Reloader, and
   NetworkPolicy starting points.
+- Keep chart NetworkPolicy opt-in for `v0.1.0`; backend, DNS, ESO, and
+  Prometheus reachability is cluster-specific and a too-generic default can
+  break first installs.
 - Attach the packaged Helm chart to tagged GitHub Releases.
 
 ## Validation Gate
