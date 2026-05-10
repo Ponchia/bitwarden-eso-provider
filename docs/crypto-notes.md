@@ -42,5 +42,6 @@ info labels to decrypt the master-key-wrapped 64-byte user key.
 This code covers master-password user-key unlock and field-level cipher
 decryption once the correct user, organization, or item key is available. User
 API-key login and per-cipher key handling are implemented. Organization key
-unwrap is separate `v1.0` work and must receive fixture tests before support is
-advertised.
+unwrap is separate work and must receive fixture tests plus live Vaultwarden and
+Bitwarden Cloud verification before support is advertised. Selected shared
+organization items fail explicitly in `v0.1.0`.

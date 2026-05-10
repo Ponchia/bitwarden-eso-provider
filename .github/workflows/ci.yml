@@ -50,6 +50,14 @@ jobs:
       - name: Render chart
         run: helm template bweso deploy/helm/bitwarden-eso-provider -f deploy/helm/lint-values.yaml --namespace bweso-system
 
+      - name: Render chart with selector policy
+        run: >
+          helm template bweso deploy/helm/bitwarden-eso-provider
+          -f deploy/helm/lint-values.yaml
+          --namespace bweso-system
+          --set-string 'selectorPolicy.allowedKeys[0]=id:example-item'
+          --set-string 'selectorPolicy.allowedKeyPrefixes[0]=id:team-a/'
+
   security:
     name: Security
     runs-on: ubuntu-latest

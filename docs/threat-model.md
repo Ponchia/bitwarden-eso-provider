@@ -37,15 +37,36 @@
   controlled by ESO `SecretStore`/`ClusterSecretStore` placement, Kubernetes
   RBAC, and optional NetworkPolicy.
 - A compromised application namespace must not allow arbitrary vault item
-  reads unless its `SecretStore` credentials explicitly allow that.
+  reads unless its `SecretStore` credentials and provider selector policy
+  explicitly allow that.
 - Deletion must be controlled by ESO policies, not hidden provider behavior.
+- Provider-side selector policy must deny by default when configured and must
+  return redacted `403` responses for disallowed `remoteRef.key` values.
+
+## Recommended Isolation Model
+
+- Use one dedicated Bitwarden/Vaultwarden user API key per namespace or trust
+  boundary.
+- Use namespace-local `SecretStore` resources by default.
+- Configure `selectorPolicy.allowedKeys` or `selectorPolicy.allowedKeyPrefixes`
+  on the provider Deployment when the credential can see more vault items than
+  the namespace should consume.
+- Treat `ClusterSecretStore` as a deliberate shared trust boundary. Kubernetes
+  RBAC can control who may reference it, but the Bitwarden/Vaultwarden account
+  and selector policy still define the data that can be read.
+
+## Unsupported Surfaces For v0.1.0
+
+- Bitwarden Secrets Manager (`bws`) is a separate product surface and is not
+  handled by this provider.
+- Shared organization vault items fail explicitly until organization-key
+  decryption is implemented and live-tested for Vaultwarden and Bitwarden
+  Cloud.
+- Attachment extraction fails explicitly. Use notes or custom fields for
+  multiline material until attachment download/decryption is implemented.
 
 ## Open Questions
 
-- Whether a dedicated Vaultwarden or Bitwarden user can be constrained tightly
-  enough through organizations and collections for multi-namespace use.
 - Whether Bitwarden Password Manager SDK internals can be reused legally and
   practically.
 - Whether item revision metadata is sufficient for efficient cache invalidation.
-- Whether ESO webhook responses should return one field at a time or whole item
-  documents.

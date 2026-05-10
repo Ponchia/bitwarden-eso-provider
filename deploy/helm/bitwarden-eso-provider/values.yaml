@@ -56,6 +56,13 @@ config:
   deviceName: Bitwarden ESO Provider
   deviceType: 22
 
+selectorPolicy:
+  # Empty lists mean allow every remoteRef.key visible to the configured
+  # Bitwarden/Vaultwarden account. Configure one or both lists to deny by
+  # default and allow only matching selectors.
+  allowedKeys: []
+  allowedKeyPrefixes: []
+
 auth:
   enabled: true
   insecureAllowUnauthenticated: false

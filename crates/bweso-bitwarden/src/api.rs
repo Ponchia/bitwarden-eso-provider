@@ -1,8 +1,11 @@
 //! Bitwarden-compatible HTTP API client and sync resolver.
 
 use std::{
-    sync::Arc,
-    time::{Duration, Instant},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use async_trait::async_trait;
@@ -36,6 +39,7 @@ pub struct BitwardenApiClient {
     cache_config: BitwardenCacheConfig,
     cache: Arc<Mutex<Option<CachedVault>>>,
     refresh_lock: Arc<Mutex<()>>,
+    metrics: Arc<CacheMetricState>,
 }
 
 impl BitwardenApiClient {
@@ -169,6 +173,7 @@ impl BitwardenApiClient {
             cache_config,
             cache: Arc::new(Mutex::new(None)),
             refresh_lock: Arc::new(Mutex::new(())),
+            metrics: Arc::new(CacheMetricState::default()),
         })
     }
 
@@ -286,6 +291,9 @@ impl BitwardenApiClient {
         let cached = cache.as_ref().ok_or(BitwardenApiError::MissingCachedSync)?;
         let cipher =
             Self::resolve_synced_cipher(&cached.sync, &cached.session.user_key, &selector.key)?;
+        if cipher.organization_id.is_some() {
+            return Err(BitwardenApiError::UnsupportedSharedItem.into());
+        }
 
         if let Some(property) = selector.property {
             let value = cipher.extract_property(&property)?;
@@ -301,15 +309,31 @@ impl BitwardenApiClient {
 
     async fn ensure_fresh_cached_sync(&self) -> Result<(), BitwardenClientError> {
         if self.has_fresh_cache().await {
+            self.metrics.cache_hits.fetch_add(1, Ordering::Relaxed);
             return Ok(());
         }
 
         let _guard = self.refresh_lock.lock().await;
         if self.has_fresh_cache().await {
+            self.metrics.cache_hits.fetch_add(1, Ordering::Relaxed);
             return Ok(());
         }
 
-        let refreshed = self.fetch_vault().await?;
+        let refreshed = match self.fetch_vault().await {
+            Ok(refreshed) => {
+                self.metrics
+                    .refresh_successes
+                    .fetch_add(1, Ordering::Relaxed);
+                self.metrics.record_last_success_now();
+                refreshed
+            }
+            Err(error) => {
+                self.metrics
+                    .refresh_failures
+                    .fetch_add(1, Ordering::Relaxed);
+                return Err(error);
+            }
+        };
         let mut cache = self.cache.lock().await;
         *cache = Some(refreshed);
         Ok(())
@@ -335,15 +359,60 @@ impl BitwardenApiClient {
         user_key: &AuthenticatedSymmetricKey,
         key: &str,
     ) -> Result<DecryptedCipher, BitwardenClientError> {
+        match CipherLookup::from_key(key) {
+            CipherLookup::Id(id) => {
+                let cipher = sync
+                    .ciphers
+                    .iter()
+                    .find(|cipher| cipher.id == id)
+                    .ok_or(BitwardenApiError::CipherNotFound)?;
+                if cipher.organization_id.is_some() {
+                    return Err(BitwardenApiError::UnsupportedSharedItem.into());
+                }
+                return cipher.decrypt(user_key).map_err(BitwardenClientError::from);
+            }
+            CipherLookup::Name(name) => {
+                return Self::resolve_synced_cipher_by_name(sync, user_key, name)
+            }
+            CipherLookup::IdThenName => {}
+        }
+
         let mut name_match = None;
 
         for cipher in &sync.ciphers {
             if cipher.id == key {
+                if cipher.organization_id.is_some() {
+                    return Err(BitwardenApiError::UnsupportedSharedItem.into());
+                }
                 return Ok(cipher.decrypt(user_key)?);
             }
 
             if let Ok(decrypted) = cipher.decrypt(user_key) {
                 if decrypted.name.as_deref() == Some(key) {
+                    if name_match.is_some() {
+                        return Err(BitwardenApiError::AmbiguousCipherName.into());
+                    }
+                    name_match = Some(decrypted);
+                }
+            }
+        }
+
+        name_match.ok_or_else(|| BitwardenApiError::CipherNotFound.into())
+    }
+
+    fn resolve_synced_cipher_by_name(
+        sync: &SyncResponse,
+        user_key: &AuthenticatedSymmetricKey,
+        name: &str,
+    ) -> Result<DecryptedCipher, BitwardenClientError> {
+        let mut name_match = None;
+
+        for cipher in &sync.ciphers {
+            if let Ok(decrypted) = cipher.decrypt(user_key) {
+                if decrypted.name.as_deref() == Some(name) {
+                    if cipher.organization_id.is_some() {
+                        return Err(BitwardenApiError::UnsupportedSharedItem.into());
+                    }
                     if name_match.is_some() {
                         return Err(BitwardenApiError::AmbiguousCipherName.into());
                     }
@@ -381,6 +450,28 @@ impl BitwardenProvider for BitwardenApiClient {
         selector: BitwardenSelector,
     ) -> Result<SecretDocument, BitwardenClientError> {
         self.resolve_with_cached_sync(selector).await
+    }
+
+    fn cache_metrics(&self) -> Option<BitwardenCacheMetrics> {
+        Some(self.metrics.snapshot())
+    }
+}
+
+enum CipherLookup<'a> {
+    Id(&'a str),
+    Name(&'a str),
+    IdThenName,
+}
+
+impl<'a> CipherLookup<'a> {
+    fn from_key(key: &'a str) -> Self {
+        if let Some(id) = key.strip_prefix("id:") {
+            return Self::Id(id);
+        }
+        if let Some(name) = key.strip_prefix("name:") {
+            return Self::Name(name);
+        }
+        Self::IdThenName
     }
 }
 
@@ -441,6 +532,59 @@ impl Default for BitwardenHttpConfig {
             request_timeout: DEFAULT_HTTP_REQUEST_TIMEOUT,
         }
     }
+}
+
+/// Snapshot of sync cache metrics.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct BitwardenCacheMetrics {
+    /// Number of resolve requests served from a fresh sync cache.
+    pub cache_hits: u64,
+    /// Number of successful full vault refreshes.
+    pub refresh_successes: u64,
+    /// Number of failed full vault refresh attempts.
+    pub refresh_failures: u64,
+    /// Unix timestamp of the latest successful refresh.
+    pub last_success_unix_seconds: Option<u64>,
+    /// Age in seconds of the latest successful refresh at snapshot time.
+    pub last_success_age_seconds: Option<u64>,
+}
+
+#[derive(Debug, Default)]
+struct CacheMetricState {
+    cache_hits: AtomicU64,
+    refresh_successes: AtomicU64,
+    refresh_failures: AtomicU64,
+    last_success_unix_seconds: AtomicU64,
+}
+
+impl CacheMetricState {
+    fn record_last_success_now(&self) {
+        let now = unix_now_seconds();
+        if now > 0 {
+            self.last_success_unix_seconds.store(now, Ordering::Relaxed);
+        }
+    }
+
+    fn snapshot(&self) -> BitwardenCacheMetrics {
+        let last_success = self.last_success_unix_seconds.load(Ordering::Relaxed);
+        let last_success_unix_seconds = (last_success > 0).then_some(last_success);
+        let last_success_age_seconds =
+            last_success_unix_seconds.map(|timestamp| unix_now_seconds().saturating_sub(timestamp));
+
+        BitwardenCacheMetrics {
+            cache_hits: self.cache_hits.load(Ordering::Relaxed),
+            refresh_successes: self.refresh_successes.load(Ordering::Relaxed),
+            refresh_failures: self.refresh_failures.load(Ordering::Relaxed),
+            last_success_unix_seconds,
+            last_success_age_seconds,
+        }
+    }
+}
+
+fn unix_now_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs())
 }
 
 struct CachedVault {
@@ -754,6 +898,10 @@ pub enum BitwardenApiError {
     /// More than one cipher matched the requested item name.
     #[error("Bitwarden-compatible cipher name is ambiguous")]
     AmbiguousCipherName,
+    /// Selected item is a shared organization item that this release does not
+    /// decrypt intentionally.
+    #[error("shared organization vault items are not supported by this provider release")]
+    UnsupportedSharedItem,
 }
 
 #[cfg(test)]
@@ -937,6 +1085,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn resolves_explicit_id_selector() -> TestResult {
+        let client = fake_client().await?;
+        let selector = BitwardenSelector::try_from(RemoteRef {
+            key: "id:cipher-login".to_string(),
+            property: Some("username".to_string()),
+            version: None,
+        })?;
+
+        let document = client.resolve(selector).await?;
+
+        assert_eq!(document.data.get("username"), Some(&"app".to_string()));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn resolves_explicit_name_selector() -> TestResult {
+        let client = fake_client().await?;
+        let selector = BitwardenSelector::try_from(RemoteRef {
+            key: "name:app/database".to_string(),
+            property: Some("username".to_string()),
+            version: None,
+        })?;
+
+        let document = client.resolve(selector).await?;
+
+        assert_eq!(document.data.get("username"), Some(&"app".to_string()));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn explicit_id_selector_does_not_fall_back_to_name() -> TestResult {
+        let client = fake_client().await?;
+        let selector = BitwardenSelector::try_from(RemoteRef {
+            key: "id:app/database".to_string(),
+            property: Some("username".to_string()),
+            version: None,
+        })?;
+
+        let Err(error) = client.resolve(selector).await else {
+            unreachable!("explicit id selector should not fall back to item names");
+        };
+
+        assert!(matches!(
+            error,
+            BitwardenClientError::Api(BitwardenApiError::CipherNotFound)
+        ));
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn resolves_cipher_property_through_api_key_login_and_sync() -> TestResult {
         let client = fake_client().await?;
         let selector = BitwardenSelector::try_from(RemoteRef {
@@ -975,6 +1173,28 @@ mod tests {
             Some(&"postgres://app:secret@db:5432/app".to_string())
         );
         assert!(document.metadata.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn selected_organization_item_fails_explicitly() -> TestResult {
+        let mut cipher = serde_json::from_str::<serde_json::Value>(LOGIN_CIPHER_JSON)?;
+        cipher["organizationId"] = json!("organization-id");
+        let (client, _) = fake_client_with_cipher(cipher, BitwardenCacheConfig::default()).await?;
+        let selector = BitwardenSelector::try_from(RemoteRef {
+            key: "id:cipher-login".to_string(),
+            property: Some("username".to_string()),
+            version: None,
+        })?;
+
+        let Err(error) = client.resolve(selector).await else {
+            unreachable!("organization item should fail explicitly");
+        };
+
+        assert!(matches!(
+            error,
+            BitwardenClientError::Api(BitwardenApiError::UnsupportedSharedItem)
+        ));
         Ok(())
     }
 
@@ -1131,7 +1351,15 @@ mod tests {
     async fn fake_client_with_cache(
         cache_config: BitwardenCacheConfig,
     ) -> Result<(BitwardenApiClient, FakeCounters), Box<dyn std::error::Error>> {
-        let (base_url, counters) = spawn_fake_server().await?;
+        let cipher = serde_json::from_str::<serde_json::Value>(LOGIN_CIPHER_JSON)?;
+        fake_client_with_cipher(cipher, cache_config).await
+    }
+
+    async fn fake_client_with_cipher(
+        cipher: serde_json::Value,
+        cache_config: BitwardenCacheConfig,
+    ) -> Result<(BitwardenApiClient, FakeCounters), Box<dyn std::error::Error>> {
+        let (base_url, counters) = spawn_fake_server_with_cipher(cipher).await?;
         let endpoint = BitwardenEndpoint::parse(&base_url)?;
         let auth = BitwardenAuth {
             client_id: "user.fixture".to_string(),
@@ -1170,8 +1398,9 @@ mod tests {
         Ok((client, counters))
     }
 
-    async fn spawn_fake_server() -> Result<(String, FakeCounters), Box<dyn std::error::Error>> {
-        let cipher = serde_json::from_str::<serde_json::Value>(LOGIN_CIPHER_JSON)?;
+    async fn spawn_fake_server_with_cipher(
+        cipher: serde_json::Value,
+    ) -> Result<(String, FakeCounters), Box<dyn std::error::Error>> {
         let counters = FakeCounters::default();
         let state = FakeState {
             cipher,

@@ -18,8 +18,8 @@ use thiserror::Error;
 use url::Url;
 
 pub use api::{
-    BitwardenApiClient, BitwardenApiError, BitwardenCacheConfig, BitwardenDevice,
-    BitwardenHttpConfig, BitwardenSession, SyncResponse,
+    BitwardenApiClient, BitwardenApiError, BitwardenCacheConfig, BitwardenCacheMetrics,
+    BitwardenDevice, BitwardenHttpConfig, BitwardenSession, SyncResponse,
 };
 pub use cipher::{
     CipherError, DecryptedCipher, DecryptedField, DecryptedLogin, DecryptedSshKey, EncryptedCipher,
@@ -160,7 +160,8 @@ pub struct BitwardenAuth {
 /// Source selector understood by the Bitwarden-compatible provider.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct BitwardenSelector {
-    /// Vault item key, ID, or stable path.
+    /// Vault item key. Supports bare ID/name lookup, `id:<item-id>`, or
+    /// `name:<item-name>`.
     pub key: String,
     /// Optional item field to extract.
     pub property: Option<String>,
@@ -187,11 +188,22 @@ impl TryFrom<RemoteRef> for BitwardenSelector {
             None => None,
         };
 
-        Ok(Self {
-            key: remote_ref.key.trim().to_string(),
-            property,
-        })
+        let key = remote_ref.key.trim().to_string();
+        validate_selector_key(&key)?;
+
+        Ok(Self { key, property })
     }
+}
+
+fn validate_selector_key(key: &str) -> Result<(), BitwardenClientError> {
+    if let Some(value) = key
+        .strip_prefix("id:")
+        .or_else(|| key.strip_prefix("name:"))
+    {
+        require_non_empty(value, "remote_ref.key")?;
+    }
+
+    Ok(())
 }
 
 /// Provider boundary used by Kubernetes-facing adapters.
@@ -207,6 +219,11 @@ pub trait BitwardenProvider: Send + Sync {
         &self,
         selector: BitwardenSelector,
     ) -> Result<SecretDocument, BitwardenClientError>;
+
+    /// Return cache metrics when the provider has a sync cache.
+    fn cache_metrics(&self) -> Option<BitwardenCacheMetrics> {
+        None
+    }
 }
 
 /// Errors returned by the Bitwarden-compatible client boundary.
@@ -334,6 +351,19 @@ mod tests {
             version: None,
         }) else {
             unreachable!("empty selector property should fail validation");
+        };
+
+        assert!(matches!(err, BitwardenClientError::Validation(_)));
+    }
+
+    #[test]
+    fn selector_rejects_empty_explicit_lookup_values() {
+        let Err(err) = BitwardenSelector::try_from(RemoteRef {
+            key: "id: ".to_string(),
+            property: None,
+            version: None,
+        }) else {
+            unreachable!("empty explicit id selector should fail validation");
         };
 
         assert!(matches!(err, BitwardenClientError::Validation(_)));

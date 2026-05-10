@@ -139,6 +139,9 @@ async fn first_extractable_selector(
         let Ok(decrypted) = cipher.decrypt(&session.user_key) else {
             continue;
         };
+        if decrypted.organization_id.is_some() {
+            continue;
+        }
         decrypted_count += 1;
 
         if let Some(property) = property.as_deref() {

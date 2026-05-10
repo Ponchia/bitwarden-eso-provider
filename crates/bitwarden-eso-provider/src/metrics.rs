@@ -7,6 +7,8 @@ use std::{
 
 use http::StatusCode;
 
+use bweso_bitwarden::BitwardenCacheMetrics;
+
 pub(crate) const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4; charset=utf-8";
 const HISTOGRAM_BUCKETS: [f64; 11] = [
     0.005, 0.010, 0.025, 0.050, 0.100, 0.250, 0.500, 1.000, 2.500, 5.000, 10.000,
@@ -72,7 +74,11 @@ impl AppMetrics {
         });
     }
 
-    pub(crate) fn render(&self, ready: bool) -> String {
+    pub(crate) fn render(
+        &self,
+        ready: bool,
+        cache_metrics: Option<BitwardenCacheMetrics>,
+    ) -> String {
         let mut output = String::new();
         let uptime = self.started_at.elapsed().as_secs_f64();
         let start_time = self
@@ -132,6 +138,9 @@ impl AppMetrics {
 
         render_http_metrics(&mut output, &snapshot.http_requests);
         render_resolve_metrics(&mut output, &snapshot.resolve_requests);
+        if let Some(cache_metrics) = cache_metrics {
+            render_cache_metrics(&mut output, cache_metrics);
+        }
 
         output
     }
@@ -296,6 +305,80 @@ fn render_resolve_metrics(
                 ("status", &key.status.to_string()),
             ],
             histogram,
+        );
+    }
+}
+
+fn render_cache_metrics(output: &mut String, metrics: BitwardenCacheMetrics) {
+    append_line(
+        output,
+        format_args!(
+            "# HELP bweso_cache_hits_total Resolve requests served from a fresh Bitwarden sync cache."
+        ),
+    );
+    append_line(
+        output,
+        format_args!("# TYPE bweso_cache_hits_total counter"),
+    );
+    append_line(
+        output,
+        format_args!("bweso_cache_hits_total {}", metrics.cache_hits),
+    );
+
+    append_line(
+        output,
+        format_args!(
+            "# HELP bweso_cache_refreshes_total Bitwarden sync cache refresh attempts by outcome."
+        ),
+    );
+    append_line(
+        output,
+        format_args!("# TYPE bweso_cache_refreshes_total counter"),
+    );
+    append_labeled_metric(
+        output,
+        "bweso_cache_refreshes_total",
+        &[("outcome", "success")],
+        &metrics.refresh_successes.to_string(),
+    );
+    append_labeled_metric(
+        output,
+        "bweso_cache_refreshes_total",
+        &[("outcome", "failure")],
+        &metrics.refresh_failures.to_string(),
+    );
+
+    if let Some(timestamp) = metrics.last_success_unix_seconds {
+        append_line(
+            output,
+            format_args!(
+                "# HELP bweso_cache_last_success_timestamp_seconds Unix timestamp of the last successful Bitwarden sync cache refresh."
+            ),
+        );
+        append_line(
+            output,
+            format_args!("# TYPE bweso_cache_last_success_timestamp_seconds gauge"),
+        );
+        append_line(
+            output,
+            format_args!("bweso_cache_last_success_timestamp_seconds {timestamp}"),
+        );
+    }
+
+    if let Some(age) = metrics.last_success_age_seconds {
+        append_line(
+            output,
+            format_args!(
+                "# HELP bweso_cache_last_success_age_seconds Age in seconds of the last successful Bitwarden sync cache refresh."
+            ),
+        );
+        append_line(
+            output,
+            format_args!("# TYPE bweso_cache_last_success_age_seconds gauge"),
+        );
+        append_line(
+            output,
+            format_args!("bweso_cache_last_success_age_seconds {age}"),
         );
     }
 }

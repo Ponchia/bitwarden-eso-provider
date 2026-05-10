@@ -13,7 +13,7 @@ BWESO_TEST_SINGLE_ORIGIN_URL="https://vaultwarden.example.com" \
 BWESO_TEST_CLIENT_ID="user.<uuid>" \
 BWESO_TEST_CLIENT_SECRET="..." \
 BWESO_TEST_MASTER_PASSWORD="..." \
-BWESO_TEST_ITEM_KEY="app/database" \
+BWESO_TEST_ITEM_KEY="id:00000000-0000-0000-0000-000000000000" \
 BWESO_TEST_PROPERTY="DATABASE_URL" \
 cargo test -p bweso-bitwarden --test live_bitwarden -- --nocapture
 ```
@@ -26,7 +26,7 @@ BWESO_TEST_API_URL="https://api.bitwarden.com" \
 BWESO_TEST_CLIENT_ID="user.<uuid>" \
 BWESO_TEST_CLIENT_SECRET="..." \
 BWESO_TEST_MASTER_PASSWORD="..." \
-BWESO_TEST_ITEM_KEY="app/database" \
+BWESO_TEST_ITEM_KEY="id:00000000-0000-0000-0000-000000000000" \
 BWESO_TEST_PROPERTY="DATABASE_URL" \
 cargo test -p bweso-bitwarden --test live_bitwarden -- --nocapture
 ```
@@ -66,9 +66,9 @@ by this project. Do not run live tests against a personal daily-use account.
 `scripts/live-eso-smoke.sh` deploys the Helm chart into a temporary namespace,
 creates a namespace-local `SecretStore`, syncs an `ExternalSecret`, verifies
 target Secret recreation, restarts the webhook Deployment, forces another sync,
-checks expected error cases for missing items/properties, and verifies `/livez`,
-`/readyz`, `/metrics`, successful/error metrics, and metric redaction. It does
-not print decrypted values.
+checks expected error cases for missing items/properties and selector-policy
+denial, and verifies `/livez`, `/readyz`, `/metrics`, successful/error/cache
+metrics, and metric redaction. It does not print decrypted values.
 
 Required:
 
@@ -77,6 +77,11 @@ Required:
 - A pushed image tag for the webhook.
 - Live test credentials through the `BWESO_TEST_*` variables above, or the
   equivalent runtime `BWESO_*` variables.
+
+The smoke test installs the chart with `selectorPolicy.allowedKeys` containing
+only the selected item and one deliberate missing item. That proves allowed
+selectors still sync and disallowed selectors fail with redacted `403`
+responses.
 
 The normal path is to push to `main`, let GitHub Actions build and publish the
 commit-tagged amd64 image, then run the smoke test with the 12-character commit

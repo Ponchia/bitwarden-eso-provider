@@ -74,10 +74,16 @@ Implemented:
 - Authenticated Bitwarden encrypted strings.
 - Login, secure-note notes, custom fields, TOTP fields, and SSH key fields.
 - Personal vault item sync against single-origin and split endpoint layouts.
+- `id:<item-id>` and `name:<item-name>` selectors. Bare selectors currently try
+  ID first and then decrypted item name for pre-release compatibility.
+- Provider-side selector policy based on exact raw keys and raw key prefixes.
 
 Not yet implemented:
 
 - Bitwarden Secrets Manager (`bws`) machine-account/project secret APIs.
-- Shared organization item decryption that requires asymmetric organization key
-  decapsulation.
+- Shared organization item decryption that requires organization key handling.
+  Selected shared items fail explicitly instead of silently returning partial
+  results.
+- Attachment metadata lookup, download, decryption, and mapping. Properties
+  beginning with `attachment.` or `attachments.` fail explicitly.
 - Interactive two-factor or new-device challenge handling for API-key login.

@@ -178,6 +178,7 @@ property="$(jq -r '.property // empty' "${selector_file}")"
 [[ -n "${property}" ]] || fail "selector must contain .property for ESO value extraction"
 missing_property="__bweso_missing_property_$(date +%s)"
 missing_item="__bweso_missing_item_$(date +%s)"
+denied_item="__bweso_policy_denied_item_$(date +%s)"
 
 log "creating namespace ${namespace}"
 "${kubectl_cmd[@]}" create namespace "${namespace}" --dry-run=client -o yaml | "${kubectl_cmd[@]}" apply -f - >/dev/null
@@ -221,6 +222,8 @@ helm_args=(
   --set-string "image.tag=${image_tag}"
   --set-string "credentials.existingSecret.name=${credentials_secret}"
   --set-string "config.cacheTtlSeconds=2"
+  --set-string "selectorPolicy.allowedKeys[0]=${item_key}"
+  --set-string "selectorPolicy.allowedKeys[1]=${missing_item}"
 )
 if [[ -n "${single_origin_url}" ]]; then
   helm_args+=(--set-string "config.singleOriginUrl=${single_origin_url}")
@@ -288,6 +291,7 @@ record_direct_metric_observations() {
   local success_body="${tmp_dir}/resolve-success-request.json"
   local success_response="${tmp_dir}/resolve-success-response.json"
   local error_body="${tmp_dir}/resolve-error-request.json"
+  local denied_body="${tmp_dir}/resolve-denied-request.json"
   local status
 
   jq -n --arg key "${item_key}" --arg property "${property}" \
@@ -309,6 +313,17 @@ record_direct_metric_observations() {
     -d @"${error_body}" \
     "http://127.0.0.1:${local_port}/v1/resolve" || true)"
   [[ "${status}" == "404" ]] || fail "direct missing-property resolve returned HTTP ${status}, expected 404"
+
+  jq -n --arg key "${denied_item}" --arg property "${property}" \
+    '{remoteRef: {key: $key, property: $property}}' >"${denied_body}"
+  status="$(curl -sS \
+    -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer ${webhook_token}" \
+    -o /dev/null \
+    -w '%{http_code}' \
+    -d @"${denied_body}" \
+    "http://127.0.0.1:${local_port}/v1/resolve" || true)"
+  [[ "${status}" == "403" ]] || fail "direct policy-denied resolve returned HTTP ${status}, expected 403"
 }
 
 start_port_forward
@@ -407,6 +422,27 @@ spec:
       remoteRef:
         key: "${missing_item}"
         property: "${property}"
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: bweso-policy-denied
+  namespace: ${namespace}
+spec:
+  refreshPolicy: Periodic
+  refreshInterval: 10s
+  secretStoreRef:
+    name: bitwarden-live
+    kind: SecretStore
+  target:
+    name: bweso-policy-denied-secret
+    creationPolicy: Owner
+    deletionPolicy: Delete
+  data:
+    - secretKey: resolved
+      remoteRef:
+        key: "${denied_item}"
+        property: "${property}"
 EOF
 
 log "applying ESO smoke resources"
@@ -470,11 +506,15 @@ wait_negative_absent() {
 log "checking expected negative cases"
 wait_negative_absent bweso-missing-property
 wait_negative_absent bweso-missing-item
+wait_negative_absent bweso-policy-denied
 if "${kubectl_cmd[@]}" -n "${namespace}" get secret bweso-missing-property-secret >/dev/null 2>&1; then
   fail "missing-property ExternalSecret unexpectedly created a target Secret"
 fi
 if "${kubectl_cmd[@]}" -n "${namespace}" get secret bweso-missing-item-secret >/dev/null 2>&1; then
   fail "missing-item ExternalSecret unexpectedly created a target Secret"
+fi
+if "${kubectl_cmd[@]}" -n "${namespace}" get secret bweso-policy-denied-secret >/dev/null 2>&1; then
+  fail "policy-denied ExternalSecret unexpectedly created a target Secret"
 fi
 
 log "checking redacted metrics endpoint"
@@ -489,6 +529,8 @@ grep -Fq 'bweso_http_requests_total' "${metrics_file}" || fail "metrics did not 
 grep -Fq 'bweso_resolve_requests_total' "${metrics_file}" || fail "metrics did not include resolution counters"
 grep -Fq 'outcome="success"' "${metrics_file}" || fail "metrics did not include successful resolution outcomes"
 grep -Fq 'outcome="error"' "${metrics_file}" || fail "metrics did not include expected error outcomes"
+grep -Fq 'error_kind="policy_denied"' "${metrics_file}" || fail "metrics did not include policy-denied outcomes"
+grep -Fq 'bweso_cache_refreshes_total' "${metrics_file}" || fail "metrics did not include cache refresh counters"
 if [[ "${#item_key}" -ge 8 ]] && grep -Fq "${item_key}" "${metrics_file}"; then
   fail "metrics leaked selected vault item key"
 fi
@@ -497,6 +539,9 @@ if grep -Fq "${missing_property}" "${metrics_file}"; then
 fi
 if grep -Fq "${missing_item}" "${metrics_file}"; then
   fail "metrics leaked missing-item selector"
+fi
+if grep -Fq "${denied_item}" "${metrics_file}"; then
+  fail "metrics leaked policy-denied selector"
 fi
 
 log "live ESO smoke test passed"

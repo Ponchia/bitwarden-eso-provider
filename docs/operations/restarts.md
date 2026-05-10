@@ -9,7 +9,8 @@ Recommended options:
 - Use applications that reload mounted Secret files or environment-derived
   config themselves when possible.
 - Use Stakater Reloader for annotation-driven Deployment restarts after Secret
-  changes.
+  changes. See
+  [`../../deploy/eso/reloader.example.yaml`](../../deploy/eso/reloader.example.yaml).
 - Use a chart checksum annotation when the Secret is rendered by the same Helm
   release as the workload.
 - Use GitOps-controlled force-sync annotations on `ExternalSecret` resources

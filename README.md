@@ -40,6 +40,11 @@ tagged release.
 - Master-password user-key unlock for PBKDF2-SHA256 and Argon2id accounts.
 - Local encrypted string and vault item decryption.
 - Whole-item extraction or one-field extraction through ESO `remoteRef`.
+- Explicit `id:<item-id>` and `name:<item-name>` selectors. Bare selectors keep
+  the pre-release ID-then-name behavior, but `id:` is recommended for
+  production.
+- Optional provider-side selector policy that allows exact keys or key prefixes
+  and denies every other `remoteRef.key`.
 - In-memory sync cache with explicit TTL and single-flight refresh behavior.
 - Bearer-token authentication on `/v1/resolve` by default; unauthenticated mode
   is an explicit local-test setting.
@@ -47,6 +52,14 @@ tagged release.
   Prometheus-format runtime, HTTP, and resolution metrics.
 - Helm chart, ESO manifests, live smoke test script, architecture notes, threat
   model, and release checklist.
+
+Current intentional limits:
+
+- Bitwarden Secrets Manager (`bws`) APIs are not supported.
+- Shared organization vault items fail explicitly until organization-key
+  decryption is implemented and live-tested.
+- Attachment extraction fails explicitly. Store certificates, kubeconfigs, SSH
+  keys, and multiline config in notes or custom fields for `v0.1.0`.
 
 ## Why This Exists
 
@@ -144,14 +157,17 @@ kubectl -n bweso-system label secret bweso-credentials \
 helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
   --namespace bweso-system \
   --set-string config.singleOriginUrl='https://vaultwarden.example.com' \
-  --set-string credentials.existingSecret.name=bweso-credentials
+  --set-string credentials.existingSecret.name=bweso-credentials \
+  --set-string selectorPolicy.allowedKeys[0]='id:00000000-0000-0000-0000-000000000000'
 ```
 
 For Bitwarden Cloud, use `config.identityUrl=https://identity.bitwarden.com` and
 `config.apiUrl=https://api.bitwarden.com` instead of `config.singleOriginUrl`.
 
 Then create an ESO `SecretStore` and `ExternalSecret` using the examples under
-[`deploy/eso`](deploy/eso).
+[`deploy/eso`](deploy/eso). Prefer namespace-local `SecretStore` resources and
+`id:<item-id>` selectors. Use a broad `ClusterSecretStore` only when every
+namespace allowed to reference it is in the same trust boundary.
 
 Compatibility details are in [`docs/compatibility.md`](docs/compatibility.md).
 Operational metrics and probe details are in

@@ -78,6 +78,20 @@ struct Args {
     device_type: u8,
     #[arg(long, env = "BWESO_CACHE_TTL_SECONDS", default_value_t = 60)]
     cache_ttl_seconds: u64,
+    #[arg(
+        long = "allowed-key",
+        env = "BWESO_ALLOWED_KEYS",
+        value_delimiter = ',',
+        value_name = "KEY"
+    )]
+    allowed_keys: Vec<String>,
+    #[arg(
+        long = "allowed-key-prefix",
+        env = "BWESO_ALLOWED_KEY_PREFIXES",
+        value_delimiter = ',',
+        value_name = "PREFIX"
+    )]
+    allowed_key_prefixes: Vec<String>,
     #[arg(long, env = "BWESO_HTTP_CONNECT_TIMEOUT_SECONDS", default_value_t = 5)]
     http_connect_timeout_seconds: u64,
     #[arg(long, env = "BWESO_HTTP_REQUEST_TIMEOUT_SECONDS", default_value_t = 25)]
@@ -100,6 +114,7 @@ struct Args {
 #[derive(Clone)]
 struct AppState {
     provider: Arc<dyn BitwardenProvider>,
+    selector_policy: SelectorPolicy,
     auth: WebhookAuth,
     metrics: Arc<AppMetrics>,
     lifecycle: Lifecycle,
@@ -131,6 +146,7 @@ async fn main() -> anyhow::Result<()> {
 
     let state = AppState {
         provider: provider_from_args(&args)?,
+        selector_policy: SelectorPolicy::from_args(&args)?,
         auth: WebhookAuth::from_args(&args)?,
         metrics: Arc::new(AppMetrics::new()),
         lifecycle: lifecycle.clone(),
@@ -146,6 +162,50 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     Ok(())
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct SelectorPolicy {
+    allowed_keys: Arc<Vec<String>>,
+    allowed_key_prefixes: Arc<Vec<String>>,
+}
+
+impl SelectorPolicy {
+    fn from_args(args: &Args) -> anyhow::Result<Self> {
+        let allowed_keys = normalize_policy_entries(&args.allowed_keys, "allowed_key")?;
+        let allowed_key_prefixes =
+            normalize_policy_entries(&args.allowed_key_prefixes, "allowed_key_prefix")?;
+
+        Ok(Self {
+            allowed_keys: Arc::new(allowed_keys),
+            allowed_key_prefixes: Arc::new(allowed_key_prefixes),
+        })
+    }
+
+    fn allows(&self, key: &str) -> bool {
+        if self.allowed_keys.is_empty() && self.allowed_key_prefixes.is_empty() {
+            return true;
+        }
+
+        self.allowed_keys
+            .iter()
+            .any(|allowed_key| allowed_key == key)
+            || self
+                .allowed_key_prefixes
+                .iter()
+                .any(|prefix| key.starts_with(prefix))
+    }
+}
+
+fn normalize_policy_entries(entries: &[String], name: &'static str) -> anyhow::Result<Vec<String>> {
+    let mut normalized = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let entry = entry.trim();
+        require_non_empty(entry, name)?;
+        normalized.push(entry.to_string());
+    }
+
+    Ok(normalized)
 }
 
 fn run_healthcheck(raw_url: &str) -> anyhow::Result<()> {
@@ -414,7 +474,9 @@ async fn readyz(State(state): State<AppState>) -> impl IntoResponse {
 async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, PROMETHEUS_CONTENT_TYPE)],
-        state.metrics.render(state.lifecycle.is_ready()),
+        state
+            .metrics
+            .render(state.lifecycle.is_ready(), state.provider.cache_metrics()),
     )
 }
 
@@ -467,6 +529,14 @@ async fn resolve(
         }
     };
 
+    if !state.selector_policy.allows(&selector.key) {
+        let status = StatusCode::FORBIDDEN;
+        state
+            .metrics
+            .record_resolve_request(status, "error", "policy_denied", started.elapsed());
+        return Err(public_error(status, "policy_denied"));
+    }
+
     match state.provider.resolve(selector).await {
         Ok(document) => {
             state.metrics.record_resolve_request(
@@ -488,10 +558,14 @@ async fn resolve(
 }
 
 fn auth_error() -> (StatusCode, Json<ErrorResponse>) {
+    public_error(StatusCode::UNAUTHORIZED, "auth")
+}
+
+fn public_error(status: StatusCode, error_kind: &str) -> (StatusCode, Json<ErrorResponse>) {
     (
-        StatusCode::UNAUTHORIZED,
+        status,
         Json(ErrorResponse {
-            error: public_error_message("auth").to_string(),
+            error: public_error_message(error_kind).to_string(),
         }),
     )
 }
@@ -513,8 +587,14 @@ fn provider_status_and_kind(error: &BitwardenClientError) -> (StatusCode, &'stat
         | BitwardenClientError::Api(BitwardenApiError::CipherNotFound) => {
             (StatusCode::NOT_FOUND, "not_found")
         }
+        BitwardenClientError::Cipher(CipherError::UnsupportedAttachment) => {
+            (StatusCode::UNPROCESSABLE_ENTITY, "unsupported_attachment")
+        }
         BitwardenClientError::Api(BitwardenApiError::AmbiguousCipherName) => {
             (StatusCode::CONFLICT, "ambiguous_selector")
+        }
+        BitwardenClientError::Api(BitwardenApiError::UnsupportedSharedItem) => {
+            (StatusCode::UNPROCESSABLE_ENTITY, "unsupported_shared_item")
         }
         BitwardenClientError::Api(BitwardenApiError::Http(_)) => {
             (StatusCode::BAD_GATEWAY, "upstream_http")
@@ -552,8 +632,11 @@ fn public_error_message(error_kind: &str) -> &'static str {
         "auth" => "provider authentication failed",
         "validation" => "invalid resolve request",
         "unsupported_version" => "remoteRef.version is not supported",
+        "policy_denied" => "requested Bitwarden item is not allowed by provider policy",
         "not_found" => "requested Bitwarden item or property was not found",
         "ambiguous_selector" => "requested Bitwarden item name is ambiguous; use the item ID",
+        "unsupported_attachment" => "Bitwarden attachment extraction is not supported",
+        "unsupported_shared_item" => "shared organization Bitwarden items are not supported",
         "upstream_http" => "Bitwarden-compatible upstream request failed",
         "upstream_status" => "Bitwarden-compatible upstream returned an error status",
         "crypto" => "failed to decrypt selected Bitwarden item",
@@ -620,6 +703,16 @@ mod tests {
 
             Ok(SecretDocument::single(data_key, "resolved-secret"))
         }
+
+        fn cache_metrics(&self) -> Option<bweso_bitwarden::BitwardenCacheMetrics> {
+            Some(bweso_bitwarden::BitwardenCacheMetrics {
+                cache_hits: 2,
+                refresh_successes: 1,
+                refresh_failures: 0,
+                last_success_unix_seconds: Some(1_700_000_000),
+                last_success_age_seconds: Some(5),
+            })
+        }
     }
 
     struct MissingPropertyProvider;
@@ -644,6 +737,7 @@ mod tests {
     fn test_state(provider: Arc<dyn BitwardenProvider>) -> AppState {
         AppState {
             provider,
+            selector_policy: SelectorPolicy::default(),
             auth: WebhookAuth::DisabledInsecure,
             metrics: Arc::new(AppMetrics::new()),
             lifecycle: Lifecycle::default(),
@@ -653,6 +747,7 @@ mod tests {
     fn test_state_with_auth(provider: Arc<dyn BitwardenProvider>, token: &str) -> AppState {
         AppState {
             provider,
+            selector_policy: SelectorPolicy::default(),
             auth: WebhookAuth::Required(Arc::new(token.to_string().into())),
             metrics: Arc::new(AppMetrics::new()),
             lifecycle: Lifecycle::default(),
@@ -675,6 +770,8 @@ mod tests {
             device_name: "BWESO Test".to_string(),
             device_type: 22,
             cache_ttl_seconds: 60,
+            allowed_keys: Vec::new(),
+            allowed_key_prefixes: Vec::new(),
             http_connect_timeout_seconds: 5,
             http_request_timeout_seconds: 25,
             webhook_auth_token: Some("test-webhook-token".to_string()),
@@ -813,11 +910,50 @@ mod tests {
     }
 
     #[test]
+    fn selector_policy_allows_everything_when_unconfigured() -> TestResult {
+        let policy = SelectorPolicy::from_args(&valid_args())?;
+
+        assert!(policy.allows("id:item-a"));
+        assert!(policy.allows("name:anything"));
+        Ok(())
+    }
+
+    #[test]
+    fn selector_policy_allows_exact_keys_and_prefixes() -> TestResult {
+        let mut args = valid_args();
+        args.allowed_keys = vec!["id:item-a".to_string()];
+        args.allowed_key_prefixes = vec!["id:team-a/".to_string()];
+        let policy = SelectorPolicy::from_args(&args)?;
+
+        assert!(policy.allows("id:item-a"));
+        assert!(policy.allows("id:team-a/database"));
+        assert!(!policy.allows("id:item-b"));
+        assert!(!policy.allows("name:item-a"));
+        Ok(())
+    }
+
+    #[test]
+    fn selector_policy_rejects_blank_entries() {
+        let mut args = valid_args();
+        args.allowed_keys = vec!["id:item-a".to_string(), " ".to_string()];
+
+        let Some(error) = SelectorPolicy::from_args(&args).err() else {
+            unreachable!("blank policy entry should fail");
+        };
+
+        assert!(error.to_string().contains("allowed_key must not be empty"));
+    }
+
+    #[test]
     fn public_error_messages_cover_all_error_classes() {
         let expected = [
             ("auth", "provider authentication failed"),
             ("validation", "invalid resolve request"),
             ("unsupported_version", "remoteRef.version is not supported"),
+            (
+                "policy_denied",
+                "requested Bitwarden item is not allowed by provider policy",
+            ),
             (
                 "not_found",
                 "requested Bitwarden item or property was not found",
@@ -825,6 +961,14 @@ mod tests {
             (
                 "ambiguous_selector",
                 "requested Bitwarden item name is ambiguous; use the item ID",
+            ),
+            (
+                "unsupported_attachment",
+                "Bitwarden attachment extraction is not supported",
+            ),
+            (
+                "unsupported_shared_item",
+                "shared organization Bitwarden items are not supported",
             ),
             (
                 "upstream_http",
@@ -851,6 +995,21 @@ mod tests {
         for (kind, message) in expected {
             assert_eq!(public_error_message(kind), message);
         }
+    }
+
+    #[test]
+    fn provider_status_maps_unsupported_surfaces() {
+        let attachment_error = BitwardenClientError::from(CipherError::UnsupportedAttachment);
+        assert_eq!(
+            provider_status_and_kind(&attachment_error),
+            (StatusCode::UNPROCESSABLE_ENTITY, "unsupported_attachment")
+        );
+
+        let shared_error = BitwardenClientError::from(BitwardenApiError::UnsupportedSharedItem);
+        assert_eq!(
+            provider_status_and_kind(&shared_error),
+            (StatusCode::UNPROCESSABLE_ENTITY, "unsupported_shared_item")
+        );
     }
 
     #[test]
@@ -1049,6 +1208,10 @@ mod tests {
         assert!(body.contains(
             "bweso_resolve_requests_total{outcome=\"success\",error_kind=\"none\",status=\"200\"} 1"
         ));
+        assert!(body.contains("bweso_cache_hits_total 2"));
+        assert!(body.contains("bweso_cache_refreshes_total{outcome=\"success\"} 1"));
+        assert!(body.contains("bweso_cache_last_success_timestamp_seconds 1700000000"));
+        assert!(body.contains("bweso_cache_last_success_age_seconds 5"));
         assert!(!body.contains("app/database"));
         assert!(!body.contains("DATABASE_URL"));
         Ok(())
@@ -1092,6 +1255,48 @@ mod tests {
         assert!(!body.contains("app/database"));
         assert!(!body.contains("DATABASE_URL"));
         assert!(!body.contains("42"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn resolve_rejects_selector_denied_by_policy_without_leaking_key() -> TestResult {
+        let mut state = test_state(Arc::new(StaticProvider));
+        state.selector_policy = SelectorPolicy {
+            allowed_keys: Arc::new(vec!["id:allowed".to_string()]),
+            allowed_key_prefixes: Arc::new(Vec::new()),
+        };
+        let app = build_router(state);
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/v1/resolve")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        r#"{"remoteRef":{"key":"id:denied","property":"DATABASE_URL"}}"#,
+                    ))?,
+            )
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let body = std::str::from_utf8(&body)?;
+        assert!(body.contains("requested Bitwarden item is not allowed"));
+        assert!(!body.contains("id:denied"));
+        assert!(!body.contains("DATABASE_URL"));
+
+        let response = app
+            .oneshot(Request::builder().uri("/metrics").body(Body::empty())?)
+            .await?;
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let body = std::str::from_utf8(&body)?;
+        assert!(body.contains(
+            "bweso_resolve_requests_total{outcome=\"error\",error_kind=\"policy_denied\",status=\"403\"} 1"
+        ));
+        assert!(!body.contains("id:denied"));
+        assert!(!body.contains("DATABASE_URL"));
         Ok(())
     }
 

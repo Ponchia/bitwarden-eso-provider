@@ -81,6 +81,14 @@ spec:
               value: {{ .Values.config.deviceName | quote }}
             - name: BWESO_DEVICE_TYPE
               value: {{ .Values.config.deviceType | quote }}
+            {{- if .Values.selectorPolicy.allowedKeys }}
+            - name: BWESO_ALLOWED_KEYS
+              value: {{ join "," .Values.selectorPolicy.allowedKeys | quote }}
+            {{- end }}
+            {{- if .Values.selectorPolicy.allowedKeyPrefixes }}
+            - name: BWESO_ALLOWED_KEY_PREFIXES
+              value: {{ join "," .Values.selectorPolicy.allowedKeyPrefixes | quote }}
+            {{- end }}
             - name: RUST_LOG
               value: {{ .Values.logging.rustLog | quote }}
             {{- with .Values.extraEnv }}

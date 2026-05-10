@@ -22,6 +22,8 @@ Initial notes on authenticated encrypted string handling live in
 - Add cache with explicit TTL and single-flight refresh.
 - Add split Bitwarden Cloud endpoint support with fake-server coverage.
 - Add redacted metrics, health probes, and graceful shutdown readiness behavior.
+- Add optional selector allowlists and explicit unsupported shared-item and
+  attachment failures.
 - Add a local CLI smoke-test command.
 - Add opt-in live Bitwarden-compatible smoke test.
 
@@ -40,4 +42,7 @@ Initial notes on authenticated encrypted string handling live in
 
 - Document rollout/restart options with Reloader and GitOps annotations.
 - Add examples for TLS, docker config, basic auth, and multiline files.
+- Add organization/shared item decryption after fixture and live coverage.
+- Add attachment download/decryption only after a clear Kubernetes mapping is
+  documented.
 - Decide whether a native controller or native ESO provider is needed.

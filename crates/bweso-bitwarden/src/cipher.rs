@@ -197,6 +197,9 @@ impl DecryptedCipher {
         if property.is_empty() {
             return Err(CipherError::BlankProperty);
         }
+        if property.starts_with("attachment.") || property.starts_with("attachments.") {
+            return Err(CipherError::UnsupportedAttachment);
+        }
 
         match property {
             "name" => return existing(property, self.name.as_deref()),
@@ -363,6 +366,9 @@ pub enum CipherError {
         /// Cipher identifier.
         id: String,
     },
+    /// Attachment download and decryption is not implemented in this release.
+    #[error("Bitwarden attachment extraction is not supported by this provider release")]
+    UnsupportedAttachment,
 }
 
 fn decrypt_optional(
@@ -443,6 +449,20 @@ mod tests {
         };
 
         assert!(matches!(error, CipherError::MissingProperty { .. }));
+        Ok(())
+    }
+
+    #[test]
+    fn reports_unsupported_attachment_property() -> Result<(), Box<dyn std::error::Error>> {
+        let key = AuthenticatedSymmetricKey::from_base64(KEY_B64)?;
+        let cipher = serde_json::from_str::<EncryptedCipher>(LOGIN_CIPHER_JSON)?;
+        let decrypted = cipher.decrypt(&key)?;
+
+        let Err(error) = decrypted.extract_property("attachment.tls.crt") else {
+            unreachable!("attachment properties should fail explicitly");
+        };
+
+        assert!(matches!(error, CipherError::UnsupportedAttachment));
         Ok(())
     }
 

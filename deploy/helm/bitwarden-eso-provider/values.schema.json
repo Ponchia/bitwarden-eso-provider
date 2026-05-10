@@ -104,6 +104,26 @@
         }
       }
     },
+    "selectorPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowedKeys": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "allowedKeyPrefixes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
     "probes": {
       "type": "object",
       "additionalProperties": false,

@@ -14,6 +14,8 @@ The default chart shape is intentionally small:
 - Prometheus metrics exposed by the pod, with optional `ServiceMonitor`
   rendering when Prometheus Operator CRDs are installed.
 - Webhook bearer-token authentication enabled by default.
+- Optional provider-side selector policy with exact `remoteRef.key` allowlists
+  and prefix allowlists.
 - Baseline resource requests/limits, seccomp, and NetworkPolicy enabled by
   default. Tune egress rules for private Bitwarden or Vaultwarden endpoints.
 
@@ -23,5 +25,6 @@ Render it locally with non-secret lint values:
 helm lint deploy/helm/bitwarden-eso-provider -f deploy/helm/lint-values.yaml
 helm template bweso deploy/helm/bitwarden-eso-provider \
   -f deploy/helm/lint-values.yaml \
-  --namespace bweso-system
+  --namespace bweso-system \
+  --set-string 'selectorPolicy.allowedKeys[0]=id:00000000-0000-0000-0000-000000000000'
 ```

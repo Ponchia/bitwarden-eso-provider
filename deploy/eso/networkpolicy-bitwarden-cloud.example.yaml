@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bweso-bitwarden-cloud-egress
+  namespace: bweso-system
+  annotations:
+    bweso.dev/security-note: "Native Kubernetes NetworkPolicy cannot restrict egress by FQDN; use a CNI or egress gateway with DNS/FQDN policy if strict Bitwarden Cloud egress is required."
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: bitwarden-eso-provider
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - ports:
+        - protocol: TCP
+          port: 443

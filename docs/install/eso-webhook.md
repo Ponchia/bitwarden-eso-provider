@@ -27,7 +27,8 @@ helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
   --namespace bweso-system \
   --set-string image.tag='0.1.0' \
   --set-string config.singleOriginUrl='https://vaultwarden.example.com' \
-  --set-string credentials.existingSecret.name=bweso-credentials
+  --set-string credentials.existingSecret.name=bweso-credentials \
+  --set-string selectorPolicy.allowedKeys[0]='id:00000000-0000-0000-0000-000000000000'
 ```
 
 Install the webhook for Bitwarden Cloud US:
@@ -38,11 +39,19 @@ helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
   --set-string image.tag='0.1.0' \
   --set-string config.identityUrl='https://identity.bitwarden.com' \
   --set-string config.apiUrl='https://api.bitwarden.com' \
-  --set-string credentials.existingSecret.name=bweso-credentials
+  --set-string credentials.existingSecret.name=bweso-credentials \
+  --set-string selectorPolicy.allowedKeys[0]='id:00000000-0000-0000-0000-000000000000'
 ```
 
 Use `https://identity.bitwarden.eu` and `https://api.bitwarden.eu` for
 Bitwarden EU.
+
+`selectorPolicy.allowedKeys` and `selectorPolicy.allowedKeyPrefixes` are
+provider-side allowlists for the raw `remoteRef.key`. Empty lists allow all
+items visible to the configured account, which is acceptable only when the
+Bitwarden/Vaultwarden account itself is already scoped to the trust boundary.
+When either list is configured, every non-matching selector returns `403`
+without echoing the requested key.
 
 Point ESO at the webhook:
 
@@ -76,9 +85,12 @@ spec:
 ```
 
 Then create `ExternalSecret` resources that select item IDs/names and
-properties. Single-property responses always expose the selected value at
-`$.data.value`, so the `SecretStore` does not need JSONPath templating for field
-names. See [`../../deploy/eso`](../../deploy/eso) for examples.
+properties. Prefer `id:<item-id>` selectors. `name:<item-name>` is supported for
+operator convenience, and bare selectors currently try ID first then item name
+for pre-release compatibility. Single-property responses always expose the
+selected value at `$.data.value`, so the `SecretStore` does not need JSONPath
+templating for field names. See [`../../deploy/eso`](../../deploy/eso) for
+Secret type, Reloader, `ClusterSecretStore`, and NetworkPolicy examples.
 
 The chart configures startup, liveness, and readiness probes by default:
 
