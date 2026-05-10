@@ -400,7 +400,7 @@ mod tests {
     fn histogram_renders_buckets_sum_and_count() {
         let mut histogram = HistogramValues::default();
         histogram.observe(Duration::from_millis(5));
-        histogram.observe(Duration::from_millis(11_000));
+        histogram.observe(Duration::from_secs(11));
         let mut output = String::new();
 
         append_histogram(
