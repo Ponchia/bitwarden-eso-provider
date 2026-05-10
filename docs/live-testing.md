@@ -83,6 +83,11 @@ commit-tagged amd64 image, then run the smoke test with the 12-character commit
 tag. This avoids slow local `linux/amd64` Docker builds on Apple Silicon or
 other non-amd64 workstations.
 
+If the GHCR package is private and was created manually before the workflow was
+in place, grant the repository `Write` access under the package settings'
+`Manage Actions access` section. Otherwise GitHub Actions can authenticate with
+`GITHUB_TOKEN` but GHCR will still reject the push with `403 Forbidden`.
+
 Example with a private GHCR image:
 
 ```bash
