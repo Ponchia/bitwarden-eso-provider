@@ -13,8 +13,11 @@ updates:
           - pbkdf2
           - sha2
     ignore:
-      # cbc 0.2 moves to cipher 0.5 while the current aes stack still uses cipher 0.4.
+      # aes/cbc 0.x minor releases move between RustCrypto cipher API generations.
       # Revisit as an intentional grouped block-cipher migration.
+      - dependency-name: aes
+        update-types:
+          - version-update:semver-minor
       - dependency-name: cbc
         update-types:
           - version-update:semver-minor
