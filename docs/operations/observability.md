@@ -19,8 +19,10 @@ The provider exposes dedicated probe endpoints:
 | Endpoint | Meaning |
 | --- | --- |
 | `/livez` | Process is alive and the HTTP server can respond. |
-| `/readyz` | Pod is ready to receive webhook traffic. Returns `503` after shutdown starts. |
+| `/readyz` | Pod is ready to receive webhook traffic. |
 | `/metrics` | Prometheus text exposition. |
+
+`/readyz` returns `503` after graceful shutdown starts.
 
 The Helm chart enables startup, liveness, and readiness probes by default.
 Liveness intentionally does not call Bitwarden or Vaultwarden. Upstream outages
@@ -36,6 +38,8 @@ text/plain; version=0.0.4; charset=utf-8
 
 Current series:
 
+<!-- markdownlint-disable MD013 -->
+
 | Metric | Type | Labels | Notes |
 | --- | --- | --- | --- |
 | `bweso_build_info` | gauge | `version` | Static build metadata. |
@@ -50,6 +54,8 @@ Current series:
 | `bweso_cache_refreshes_total` | counter | `outcome` | Full vault sync cache refresh attempts. |
 | `bweso_cache_last_success_timestamp_seconds` | gauge | none | Unix timestamp of the last successful sync cache refresh. Present after the first successful refresh. |
 | `bweso_cache_last_success_age_seconds` | gauge | none | Age of the last successful sync cache refresh. Present after the first successful refresh. |
+
+<!-- markdownlint-enable MD013 -->
 
 Resolution labels are intentionally coarse. They expose classes like
 `auth`, `validation`, `policy_denied`, `not_found`, `ambiguous_selector`,

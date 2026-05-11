@@ -17,12 +17,17 @@ kubectl -n bweso-system create secret generic bweso-credentials \
 The provider rejects `/v1/resolve` calls without `Authorization: Bearer
 <webhook-token>` by default.
 
+Choose the provider image reference first. Before the first public tag, build
+and push your own image or run the Release workflow on `main` and use the
+commit image tag it publishes. After `v0.1.0` is published, use `0.1.0` or a
+specific image digest.
+
 Install the webhook for Vaultwarden or single-origin self-hosted Bitwarden:
 
 ```bash
 helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
   --namespace bweso-system \
-  --set-string image.tag='0.1.0' \
+  --set-string image.tag='<tag>' \
   --set-string config.singleOriginUrl='https://vaultwarden.example.com' \
   --set-string credentials.existingSecret.name=bweso-credentials \
   --set-string selectorPolicy.allowedKeys[0]='id:00000000-0000-0000-0000-000000000000'
@@ -33,7 +38,7 @@ Install the webhook for Bitwarden Cloud US:
 ```bash
 helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
   --namespace bweso-system \
-  --set-string image.tag='0.1.0' \
+  --set-string image.tag='<tag>' \
   --set-string config.identityUrl='https://identity.bitwarden.com' \
   --set-string config.apiUrl='https://api.bitwarden.com' \
   --set-string credentials.existingSecret.name=bweso-credentials \
@@ -92,11 +97,12 @@ spec:
       method: POST
       headers:
         Content-Type: application/json
-        Authorization: Bearer {{ index .auth "webhook-token" }}
+        Authorization: 'Bearer {{ index .auth "webhook-token" }}'
       secrets:
         - name: auth
           secretRef:
             name: bweso-webhook-auth
+            key: webhook-token
       body: |
         {
           "remoteRef": {

@@ -77,7 +77,7 @@ Implemented:
 - PBKDF2-SHA256 and Argon2id account KDFs.
 - Authenticated Bitwarden encrypted strings.
 - Login, secure-note notes, custom fields, TOTP fields, and SSH key fields.
-- Personal vault item sync against single-origin and split endpoint layouts.
+- Individual vault item sync against single-origin and split endpoint layouts.
 - Single-field ESO sync through `remoteRef` and whole-item ESO sync through
   `dataFrom.extract`.
 - `id:<item-id>` and `name:<item-name>` selectors. Bare selectors currently try

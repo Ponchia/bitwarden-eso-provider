@@ -1,48 +1,71 @@
 # Roadmap
 
-## Phase 0: Design Spike
+This roadmap separates what is already in the pre-release codebase from work
+that should wait until after `v0.1.0`.
 
-- Map Bitwarden/Vaultwarden auth and cipher endpoints.
-- Map Bitwarden client-side decryption flow.
-- Document 1Password Operator use cases and restart semantics.
-- Validate ESO webhook request and response contracts.
-- Decide field addressing syntax.
+## v0.1.0 Release Candidate
 
-Initial notes on authenticated encrypted string handling live in
-[`crypto-notes.md`](crypto-notes.md).
+The current release-candidate scope is:
 
-## Phase 1: Local Provider
+- Bitwarden Password Manager and Vaultwarden vault-item sync through External
+  Secrets Operator's generic webhook provider.
+- Bitwarden-compatible user API-key login, master-password unlock, vault sync,
+  and local item decryption.
+- PBKDF2-SHA256 and Argon2id account KDF support.
+- Vaultwarden/single-origin endpoints and Bitwarden Cloud split endpoints.
+- Single-field `remoteRef` resolution and whole-item `dataFrom.extract`
+  resolution.
+- `id:<item-id>` and `name:<item-name>` selectors, with bare selector lookup
+  kept only for pre-release compatibility.
+- Provider-side selector allowlists for exact keys and key prefixes.
+- Explicit hard failures for unsupported shared organization items and
+  attachments.
+- Redacted logs, public error bodies, and low-cardinality Prometheus metrics.
+- Health probes, graceful shutdown readiness behavior, and cache metrics.
+- Helm chart, ESO examples, NetworkPolicy examples, Reloader example,
+  PrometheusRule example, Grafana dashboard, threat model, release checklist,
+  and live smoke-test script.
+- Multi-arch release workflow with GHCR image publishing, SBOM/provenance, and
+  Helm chart attachment to GitHub Releases.
 
-- Implement Bitwarden-compatible login with user API key. Initial fake-server
-  coverage is in place.
-- Implement vault unlock and item decryption with tests from deterministic
-  fixtures.
-- Add field extraction for login, secure note, SSH key, and custom fields.
-- Wire runtime configuration into `bitwarden-eso-provider`.
-- Add cache with explicit TTL and single-flight refresh.
-- Add split Bitwarden Cloud endpoint support with fake-server coverage.
-- Add redacted metrics, health probes, and graceful shutdown readiness behavior.
-- Add optional selector allowlists and explicit unsupported shared-item and
-  attachment failures.
-- Add a local CLI smoke-test command.
-- Add opt-in live Bitwarden-compatible smoke test.
+Before the repository is made public, the remaining work is operational:
 
-## Phase 2: ESO Webhook
+- Keep docs aligned with the actual release state.
+- Push a clean branch and confirm GitHub Actions is green.
+- Run the release workflow or publish a tag to produce the exact image that
+  will be smoke-tested.
+- Run `scripts/live-eso-smoke.sh` against Vaultwarden and Bitwarden Cloud with
+  selector policy enabled.
+- Make the repository public only after the release docs, CI, and live smoke
+  checks are coherent.
+- Enable the documented `main` branch protection and security settings as soon
+  as GitHub exposes them for the public repository.
 
-- Implement `/v1/resolve` contract.
-- Add SecretStore and ExternalSecret examples.
-- Add Helm chart with namespace-scoped default deployment and no Kubernetes API
-  permissions.
-- Add Docker image and SBOM generation.
-- Add integration tests with local Vaultwarden and kind.
-- Add repeatable live k3s/ESO smoke script.
-- Add optional Prometheus Operator `ServiceMonitor` support.
+## After v0.1.0
 
-## Phase 3: Kubernetes Ergonomics
+High-value follow-up work:
 
-- Document rollout/restart options with Reloader and GitOps annotations.
-- Add examples for TLS, docker config, basic auth, and multiline files.
-- Add organization/shared item decryption after fixture and live coverage.
-- Add attachment download/decryption only after a clear Kubernetes mapping is
-  documented.
-- Decide whether a native controller or native ESO provider is needed.
+- Add disposable kind integration coverage that does not require private
+  credentials.
+- Assess whether a native ESO provider would remove webhook operational
+  friction without duplicating ESO's lifecycle semantics.
+- Add organization/shared item decryption after fixture coverage, key-handling
+  review, and live verification.
+- Add attachment metadata lookup, download, decryption, and Kubernetes mapping
+  only after the UX and security model are clear.
+- Evaluate stale-cache-on-upstream-outage behavior. The first release keeps
+  upstream failures explicit.
+- Decide whether OCI Helm chart publishing or a GitHub Pages chart repository is
+  worth the extra release surface.
+- Revisit a native Kubernetes controller only if ESO cannot cover important
+  workflows cleanly.
+
+## Not Planned For v0.1.0
+
+- Bitwarden Secrets Manager (`bws`) support. Use Bitwarden's official Secrets
+  Manager integrations for that product surface.
+- Built-in application workload restarts. Use ESO refreshes, Reloader, checksum
+  annotations, or GitOps rollout mechanisms.
+- Property-level selector policy. The current selector policy gates item keys;
+  isolate stricter trust boundaries with dedicated provider credentials and
+  exact `id:` allowlists.
