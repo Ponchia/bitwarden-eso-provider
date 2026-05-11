@@ -77,6 +77,11 @@ The public `v0.1.3` baseline has been validated with:
 
 ## Future Release Gate
 
+Not every repository change needs a release. Documentation cleanup,
+governance-only edits, CI-only maintenance, and source-tree hygiene can land on
+`main` without a new tag when the latest published chart and image remain the
+recommended installable artifacts.
+
 For each release:
 
 - Run the GitHub CI workflow to green.

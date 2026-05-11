@@ -6,7 +6,7 @@ to this repository.
 ## Boundaries
 
 - Reference repositories, when checked out locally, belong outside this repo.
-  Keep research notes in documentation and do not vendor reference repositories.
+  Keep public source URLs and durable review notes in `docs/`.
 - Do not vendor or copy implementation code from reference repositories.
 - Treat Bitwarden and Vaultwarden source as reference material only unless a
   license review explicitly approves reuse.

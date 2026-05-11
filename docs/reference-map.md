@@ -1,17 +1,14 @@
-# Reference Map
+# Upstream Research Map
 
-Local reference checkouts live outside this repository. The recommended local
-checkout location is:
-
-```text
-../_docs/reference-map.mdbitwarden-eso-provider
-```
+This page records the public upstream projects used as research inputs for
+Bitwarden ESO Provider. Do not vendor source from these repositories into this
+project without an explicit license review.
 
 ## Repositories
 
 <!-- markdownlint-disable MD013 -->
 
-| Directory | Upstream | Purpose |
+| Project | Upstream | Purpose |
 | --- | --- | --- |
 | `vaultwarden` | `https://github.com/dani-garcia/vaultwarden` | Vaultwarden API compatibility, server behavior, Rust style |
 | `bitwarden-clients` | `https://github.com/bitwarden/clients` | Password Manager client-side cipher, key, and field model behavior |
@@ -23,9 +20,3 @@ checkout location is:
 | `vaultwarden-kubernetes-secrets` | `https://github.com/antoniolago/vaultwarden-kubernetes-secrets` | Prior art and anti-pattern review |
 
 <!-- markdownlint-enable MD013 -->
-
-Do not copy code from these repositories into this project without an explicit
-license review.
-
-The current local snapshot is recorded in
-[`docs/reference-map.md`](../docs/reference-map.md).

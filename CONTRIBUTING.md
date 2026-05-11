@@ -11,8 +11,8 @@ must keep security, compatibility, and operational behavior clear.
   vault item names, Kubernetes Secret values, kubeconfigs, or private
   infrastructure details in issues, pull requests, tests, examples, screenshots,
   logs, or commit history.
-- Keep reference code out of the source tree. Notes and source links belong
-  in documentation.
+- Keep reference code out of the source tree. Public source links and durable
+  review notes belong in `docs/`.
 - Prefer small pull requests with a focused behavior change.
 - Add tests for behavior that touches auth, decryption, sync semantics,
   redaction, metrics, Helm rendering, or Kubernetes-facing contracts.

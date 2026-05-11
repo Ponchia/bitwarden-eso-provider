@@ -409,7 +409,6 @@ observable Kubernetes integration.
 | [deploy/helm](deploy/helm) | Helm chart for the provider deployment. |
 | [docs](docs) | Architecture, installation, compatibility, operations, testing, and security documentation. |
 | [examples](examples) | Grafana dashboard and PrometheusRule examples. |
-| [references](references) | Reference repository manifest and notes. |
 
 ## Development
 
