@@ -39,6 +39,8 @@ Protect `main` with these rules:
   - `Helm`
   - `Security`
   - `Docker`
+  - `CodeQL Rust`
+  - `CodeQL Actions`
 - Include administrators.
 - Block force pushes.
 - Block deletions.
@@ -51,9 +53,6 @@ maintainer.
 
 Do not require signed commits or a merge queue for now. Those can be added later
 once external contribution volume justifies them.
-
-Add the CodeQL checks to required status checks after the workflow has produced
-stable successful runs on `main`.
 
 ## Release Permissions
 
