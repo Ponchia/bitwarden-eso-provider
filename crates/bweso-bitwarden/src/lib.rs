@@ -2,9 +2,9 @@
 
 //! Bitwarden Password Manager and Vaultwarden-compatible client boundary.
 //!
-//! This crate will hold API, authentication, and decryption code. It currently
-//! exposes a narrow trait so adapters can be built and tested before the
-//! HTTP provider implementation is filled in.
+//! This crate owns endpoint validation, API-key login, local vault unlock,
+//! encrypted cipher decryption, selector resolution, and the provider trait used
+//! by Kubernetes-facing adapters.
 
 pub mod api;
 pub mod cipher;

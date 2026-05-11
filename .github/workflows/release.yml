@@ -30,14 +30,19 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
       - name: Clippy
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
 
-      - name: Test
-        run: cargo test --locked --workspace --all-targets
+      - name: Test with coverage guard
+        run: cargo llvm-cov --locked --workspace --all-targets --fail-under-lines 80 --summary-only
 
       - name: Install Helm
         uses: azure/setup-helm@v5
@@ -61,10 +66,14 @@ jobs:
           --set-string 'hostAliases[0].ip=10.43.186.117'
           --set-string 'hostAliases[0].hostnames[0]=vaultwarden.example.com'
 
+      - name: Validate documentation
+        run: npx --yes markdownlint-cli2 '**/*.md'
+
       - name: Validate observability examples
         run: |
           jq -e . examples/grafana/*.json >/dev/null
           ruby -e 'require "yaml"; ARGV.each { |path| YAML.safe_load(File.read(path), aliases: true) }' examples/prometheus/*.yaml
+          ruby -e 'require "yaml"; ARGV.each { |path| YAML.safe_load(File.read(path), aliases: true) }' deploy/eso/*.yaml
 
       - name: Install Gitleaks
         run: |

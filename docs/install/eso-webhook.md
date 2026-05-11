@@ -17,17 +17,24 @@ kubectl -n bweso-system create secret generic bweso-credentials \
 The provider rejects `/v1/resolve` calls without `Authorization: Bearer
 <webhook-token>` by default.
 
-Choose the provider image reference first. Before the first public tag, build
-and push your own image or run the Release workflow on `main` and use the
-commit image tag it publishes. After `v0.1.0` is published, use `0.1.0` or a
-specific image digest.
+Choose the provider image reference first. Released chart archives are attached
+to GitHub Releases and default to the matching provider image version. For
+unreleased `main` builds, clone the repository and use
+`./deploy/helm/bitwarden-eso-provider` as the chart reference.
+
+Set the release chart reference:
+
+```bash
+CHART_VERSION=0.1.0
+CHART_REF="https://github.com/ponchia/bitwarden-eso-provider/releases/download/v${CHART_VERSION}/bitwarden-eso-provider-${CHART_VERSION}.tgz"
+```
 
 Install the webhook for Vaultwarden or single-origin self-hosted Bitwarden:
 
 ```bash
-helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
+helm upgrade --install bweso "${CHART_REF}" \
   --namespace bweso-system \
-  --set-string image.tag='<tag>' \
+  --set-string image.tag="${CHART_VERSION}" \
   --set-string config.singleOriginUrl='https://vaultwarden.example.com' \
   --set-string credentials.existingSecret.name=bweso-credentials \
   --set-string selectorPolicy.allowedKeys[0]='id:00000000-0000-0000-0000-000000000000'
@@ -36,9 +43,9 @@ helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
 Install the webhook for Bitwarden Cloud US:
 
 ```bash
-helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
+helm upgrade --install bweso "${CHART_REF}" \
   --namespace bweso-system \
-  --set-string image.tag='<tag>' \
+  --set-string image.tag="${CHART_VERSION}" \
   --set-string config.identityUrl='https://identity.bitwarden.com' \
   --set-string config.apiUrl='https://api.bitwarden.com' \
   --set-string credentials.existingSecret.name=bweso-credentials \
@@ -186,7 +193,7 @@ The provider always serves Prometheus-format metrics at `/metrics`. If the
 Prometheus Operator CRDs are installed, enable a `ServiceMonitor`:
 
 ```bash
-helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
+helm upgrade --install bweso "${CHART_REF}" \
   --namespace bweso-system \
   --reuse-values \
   --set metrics.serviceMonitor.enabled=true

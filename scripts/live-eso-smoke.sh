@@ -75,6 +75,8 @@ release="${release:-bweso}"
 image_repository="$(first_env BWESO_E2E_IMAGE_REPOSITORY || true)"
 image_repository="${image_repository:-ghcr.io/ponchia/bitwarden-eso-provider}"
 image_tag="$(first_env BWESO_E2E_IMAGE_TAG || true)"
+chart_ref="$(first_env BWESO_E2E_CHART_REF || true)"
+chart_ref="${chart_ref:-${CHART_DIR}}"
 credentials_secret="$(first_env BWESO_E2E_CREDENTIALS_SECRET || true)"
 credentials_secret="${credentials_secret:-bweso-live-credentials}"
 pull_secret="$(first_env BWESO_E2E_IMAGE_PULL_SECRET || true)"
@@ -241,7 +243,7 @@ log "creating webhook credential Secret"
   external-secrets.io/type=webhook --overwrite >/dev/null
 
 helm_args=(
-  upgrade --install "${release}" "${CHART_DIR}"
+  upgrade --install "${release}" "${chart_ref}"
   --namespace "${namespace}"
   --set-string "image.repository=${image_repository}"
   --set-string "image.tag=${image_tag}"
@@ -270,7 +272,7 @@ if [[ -n "${pull_secret}" ]]; then
   helm_args+=(--set-string "imagePullSecrets[0].name=${pull_secret}")
 fi
 
-log "installing webhook chart ${image_repository}:${image_tag}"
+log "installing webhook chart ${chart_ref} with image ${image_repository}:${image_tag}"
 "${helm_cmd[@]}" "${helm_args[@]}" >/dev/null
 
 selector="app.kubernetes.io/instance=${release},app.kubernetes.io/name=bitwarden-eso-provider"
@@ -379,11 +381,12 @@ spec:
       method: POST
       headers:
         Content-Type: application/json
-        Authorization: Bearer {{ index .auth "webhook-token" }}
+        Authorization: 'Bearer {{ index .auth "webhook-token" }}'
       secrets:
         - name: auth
           secretRef:
             name: ${credentials_secret}
+            key: webhook-token
       body: |
         {
           "remoteRef": {
@@ -407,11 +410,12 @@ spec:
       method: POST
       headers:
         Content-Type: application/json
-        Authorization: Bearer {{ index .auth "webhook-token" }}
+        Authorization: 'Bearer {{ index .auth "webhook-token" }}'
       secrets:
         - name: auth
           secretRef:
             name: ${credentials_secret}
+            key: webhook-token
       body: |
         {
           "remoteRef": {

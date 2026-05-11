@@ -30,9 +30,16 @@ Install a stable Rust toolchain and Helm. Then run:
 cargo fmt --all -- --check
 cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo test --locked --workspace --all-targets
+cargo llvm-cov --locked --workspace --all-targets \
+  --fail-under-lines 80 --summary-only
 helm lint deploy/helm/bitwarden-eso-provider -f deploy/helm/lint-values.yaml
-helm template bweso deploy/helm/bitwarden-eso-provider -f deploy/helm/lint-values.yaml --namespace bweso-system
+helm template bweso deploy/helm/bitwarden-eso-provider \
+  -f deploy/helm/lint-values.yaml --namespace bweso-system
 ```
+
+`cargo llvm-cov` is the public CI coverage gate. The threshold is intentionally
+conservative; review should focus on meaningful tests for auth, selector policy,
+decryption, redaction, cache behavior, and Kubernetes-facing contracts.
 
 If dependencies change, also run:
 

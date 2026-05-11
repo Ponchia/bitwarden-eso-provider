@@ -127,6 +127,14 @@ export BWESO_TEST_ALLOW_ANY_ITEM=true
 scripts/live-eso-smoke.sh
 ```
 
+For a tagged public release, set the packaged chart explicitly so the smoke test
+does not use the local checkout:
+
+```bash
+export BWESO_E2E_IMAGE_TAG="0.1.0"
+export BWESO_E2E_CHART_REF="https://github.com/ponchia/bitwarden-eso-provider/releases/download/v0.1.0/bitwarden-eso-provider-0.1.0.tgz"
+```
+
 For public GHCR images, omit `BWESO_E2E_GHCR_TOKEN`. For private GHCR images,
 set `BWESO_E2E_GHCR_TOKEN` and optionally `BWESO_E2E_GHCR_USER`; the script
 creates a temporary namespace-local image-pull Secret without printing the

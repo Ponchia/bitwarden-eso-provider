@@ -30,6 +30,9 @@ Required before calling a release generally usable:
   and failure paths.
 - Review public HTTP error bodies for selector redaction because ESO can surface
   provider errors in `ExternalSecret` status and events.
+- Generate Rust coverage with `cargo llvm-cov`; keep total line coverage above
+  the conservative CI floor and review uncovered lines in security-sensitive
+  paths before tagging.
 - Verify `/livez`, `/readyz`, `/metrics`, default probes, and optional
   `ServiceMonitor` rendering.
 - Import or lint the example Grafana dashboard and validate the example

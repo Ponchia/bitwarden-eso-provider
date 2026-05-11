@@ -1,6 +1,7 @@
 # Bitwarden ESO Provider
 
 [![CI](https://github.com/Ponchia/bitwarden-eso-provider/actions/workflows/ci.yml/badge.svg)](https://github.com/Ponchia/bitwarden-eso-provider/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Ponchia/bitwarden-eso-provider?include_prereleases&sort=semver)](https://github.com/Ponchia/bitwarden-eso-provider/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Unofficial [External Secrets Operator](https://external-secrets.io/) webhook
@@ -100,7 +101,7 @@ Use something else when:
 - Attachment properties fail with `unsupported_attachment`. For `v0.1.0`, store
   certificates, kubeconfigs, SSH keys, and multiline config in secure notes or
   custom fields.
-- Interactive two-factor and new-device challenge flows are not implemented for
+- Interactive two-factor and new-device challenge flows are not supported for
   API-key login.
 - The provider does not restart application workloads. Use ESO refreshes,
   Stakater Reloader, checksum annotations, or your GitOps rollout mechanism.
@@ -114,9 +115,8 @@ Prerequisites:
 - Helm 3.
 - A dedicated Bitwarden or Vaultwarden user API key.
 - The user's master password.
-- A provider image tag or digest. Until the first public release is published,
-  build and push your own image or use a commit image produced by this
-  repository's release workflow.
+- A provider image tag or digest. Released chart archives are attached to GitHub
+  Releases and default to the matching provider image version.
 
 Create the provider namespace and runtime credentials:
 
@@ -130,13 +130,20 @@ kubectl -n bweso-system create secret generic bweso-credentials \
   --from-literal=webhook-token='generate-a-long-random-token'
 ```
 
+Set the release chart reference:
+
+```bash
+CHART_VERSION=0.1.0
+CHART_REF="https://github.com/ponchia/bitwarden-eso-provider/releases/download/v${CHART_VERSION}/bitwarden-eso-provider-${CHART_VERSION}.tgz"
+```
+
 Install the provider for Vaultwarden or another single-origin Bitwarden server:
 
 ```bash
-helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
+helm upgrade --install bweso "${CHART_REF}" \
   --namespace bweso-system \
   --set-string image.repository='ghcr.io/ponchia/bitwarden-eso-provider' \
-  --set-string image.tag='<tag>' \
+  --set-string image.tag="${CHART_VERSION}" \
   --set-string config.singleOriginUrl='https://vaultwarden.example.com' \
   --set-string credentials.existingSecret.name='bweso-credentials' \
   --set-string selectorPolicy.allowedKeys[0]='id:00000000-0000-0000-0000-000000000000'
@@ -145,10 +152,10 @@ helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
 For Bitwarden Cloud US, use split endpoints instead:
 
 ```bash
-helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
+helm upgrade --install bweso "${CHART_REF}" \
   --namespace bweso-system \
   --set-string image.repository='ghcr.io/ponchia/bitwarden-eso-provider' \
-  --set-string image.tag='<tag>' \
+  --set-string image.tag="${CHART_VERSION}" \
   --set-string config.identityUrl='https://identity.bitwarden.com' \
   --set-string config.apiUrl='https://api.bitwarden.com' \
   --set-string credentials.existingSecret.name='bweso-credentials' \
@@ -157,6 +164,9 @@ helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
 
 For Bitwarden Cloud EU, use `https://identity.bitwarden.eu` and
 `https://api.bitwarden.eu`.
+
+For unreleased `main` builds, clone the repository and replace `"${CHART_REF}"`
+with `./deploy/helm/bitwarden-eso-provider`.
 
 Create a token-only ESO auth Secret in each workload namespace that will use a
 namespace-local `SecretStore`:
@@ -306,7 +316,7 @@ The Helm chart can render a `ServiceMonitor` when Prometheus Operator CRDs are
 installed:
 
 ```bash
-helm upgrade --install bweso ./deploy/helm/bitwarden-eso-provider \
+helm upgrade --install bweso "${CHART_REF}" \
   --namespace bweso-system \
   --reuse-values \
   --set metrics.serviceMonitor.enabled=true
@@ -385,6 +395,18 @@ cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo test --locked --workspace --all-targets
 ```
 
+Coverage is tracked as a regression signal, not as a release goal by itself:
+
+```bash
+cargo install cargo-llvm-cov --locked
+cargo llvm-cov --locked --workspace --all-targets --fail-under-lines 80 --summary-only
+cargo llvm-cov --locked --workspace --all-targets \
+  --lcov --output-path coverage/lcov.info
+```
+
+`coverage/lcov.info` is ignored by Git and imported by SonarQube through
+`sonar-project.properties` when present.
+
 Run the provider locally against Vaultwarden or a single-origin self-hosted
 Bitwarden server:
 
@@ -427,9 +449,9 @@ Live test instructions are in [docs/live-testing.md](docs/live-testing.md).
 
 ## Contributing And Security
 
-Contributions are welcome after the repository is public. Start with
-[CONTRIBUTING.md](CONTRIBUTING.md), keep secrets out of issues and pull
-requests, and include the relevant validation commands in PRs.
+Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), keep
+secrets out of issues and pull requests, and include the relevant validation
+commands in PRs.
 
 Report vulnerabilities privately through the process in
 [SECURITY.md](SECURITY.md). Do not open public issues for credential leaks,

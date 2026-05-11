@@ -147,13 +147,13 @@ async fn first_extractable_selector(
         if let Some(property) = property.as_deref() {
             if decrypted.extract_property(property).is_ok() {
                 return Ok(BitwardenSelector {
-                    key: cipher.id.clone(),
+                    key: format!("id:{}", cipher.id),
                     property: Some(property.to_string()),
                 });
             }
         } else if let Ok(document) = decrypted.to_secret_document() {
             return Ok(BitwardenSelector {
-                key: cipher.id.clone(),
+                key: format!("id:{}", cipher.id),
                 property: document.data.keys().next().cloned(),
             });
         }
