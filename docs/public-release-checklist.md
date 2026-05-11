@@ -20,8 +20,8 @@ Required before calling a release generally usable:
   with Bitwarden login field names such as `username` and `password`.
 - Verify intentional empty target keys are documented and rendered through
   `target.template.data` with `mergePolicy: Merge`.
-- Publish the Helm chart artifact on the GitHub Release for the first
-  pre-release.
+- Publish the Helm chart to GHCR as an OCI chart and attach the packaged chart
+  artifact to the GitHub Release.
 - Review the release image SBOM/provenance output.
 - Review logs for secret-value redaction under success and failure paths.
 - Review metrics for secret-value and vault-item metadata redaction under success
@@ -50,6 +50,8 @@ Each GitHub Release must include:
 - Source commit.
 - Image reference.
 - Image index digest.
+- OCI Helm chart reference.
+- OCI Helm chart digest.
 - Helm chart download URL.
 - Helm chart SHA256.
 

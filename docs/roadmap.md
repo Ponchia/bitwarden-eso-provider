@@ -26,7 +26,8 @@ The first public release includes:
   PrometheusRule example, Grafana dashboard, threat model, release checklist,
   and live smoke-test script.
 - Multi-arch release workflow with GHCR image publishing, SBOM/provenance,
-  release image scanning, and Helm chart attachment to GitHub Releases.
+  release image scanning, GHCR OCI Helm chart publishing, and Helm chart
+  attachment to GitHub Releases.
 - Live smoke verification against Vaultwarden and Bitwarden Cloud using the
   exact release chart and image.
 
@@ -44,8 +45,8 @@ High-value follow-up work:
   only after the UX and security model are clear.
 - Evaluate stale-cache-on-upstream-outage behavior. The first release keeps
   upstream failures explicit.
-- Decide whether OCI Helm chart publishing or a GitHub Pages chart repository is
-  worth the extra release surface.
+- Decide whether a GitHub Pages chart repository is worth the extra release
+  surface for users who cannot consume OCI charts.
 - Revisit a native Kubernetes controller only if ESO cannot cover important
   workflows cleanly.
 

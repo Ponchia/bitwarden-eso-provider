@@ -77,6 +77,7 @@ image_repository="${image_repository:-ghcr.io/ponchia/bitwarden-eso-provider}"
 image_tag="$(first_env BWESO_E2E_IMAGE_TAG || true)"
 chart_ref="$(first_env BWESO_E2E_CHART_REF || true)"
 chart_ref="${chart_ref:-${CHART_DIR}}"
+chart_version="$(first_env BWESO_E2E_CHART_VERSION || true)"
 credentials_secret="$(first_env BWESO_E2E_CREDENTIALS_SECRET || true)"
 credentials_secret="${credentials_secret:-bweso-live-credentials}"
 pull_secret="$(first_env BWESO_E2E_IMAGE_PULL_SECRET || true)"
@@ -252,6 +253,9 @@ helm_args=(
   --set-string "selectorPolicy.allowedKeys[0]=${item_key}"
   --set-string "selectorPolicy.allowedKeys[1]=${missing_item}"
 )
+if [[ -n "${chart_version}" ]]; then
+  helm_args+=(--version "${chart_version}")
+fi
 if [[ -n "${single_origin_url}" ]]; then
   helm_args+=(--set-string "config.singleOriginUrl=${single_origin_url}")
 else

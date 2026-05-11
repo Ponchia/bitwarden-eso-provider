@@ -27,9 +27,11 @@ Provider.
 - Default workflow token permission: read-only. Jobs that publish images,
   upload code scanning results, or attach release artifacts must request their
   additional permissions explicitly.
-- Package visibility: the release image package must be public so Kubernetes
-  clusters can pull `ghcr.io/ponchia/bitwarden-eso-provider:<version>` without
-  registry credentials.
+- Package visibility: the release image and OCI Helm chart packages must be
+  public so Kubernetes clusters can pull
+  `ghcr.io/ponchia/bitwarden-eso-provider:<version>` and
+  `oci://ghcr.io/ponchia/charts/bitwarden-eso-provider` without registry
+  credentials.
 
 ## Main Branch Protection
 

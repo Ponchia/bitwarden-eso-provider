@@ -17,16 +17,18 @@ kubectl -n bweso-system create secret generic bweso-credentials \
 The provider rejects `/v1/resolve` calls without `Authorization: Bearer
 <webhook-token>` by default.
 
-Choose the provider image reference first. Released chart archives are attached
-to GitHub Releases and default to the matching provider image version. For
+Choose the provider image reference first. Released OCI charts are published to
+GHCR and default to the matching provider image version. The same packaged
+chart is also attached to the GitHub Release as a `.tgz` fallback. For
 unreleased `main` builds, clone the repository and use
-`./deploy/helm/bitwarden-eso-provider` as the chart reference.
+`./deploy/helm/bitwarden-eso-provider` as the chart reference, omitting
+`--version`.
 
 Set the release chart reference:
 
 ```bash
-CHART_VERSION=0.1.1
-CHART_REF="https://github.com/ponchia/bitwarden-eso-provider/releases/download/v${CHART_VERSION}/bitwarden-eso-provider-${CHART_VERSION}.tgz"
+CHART_VERSION=0.1.2
+CHART_REF="oci://ghcr.io/ponchia/charts/bitwarden-eso-provider"
 ```
 
 Install the webhook for Vaultwarden or single-origin self-hosted Bitwarden:
@@ -34,6 +36,7 @@ Install the webhook for Vaultwarden or single-origin self-hosted Bitwarden:
 ```bash
 helm upgrade --install bweso "${CHART_REF}" \
   --namespace bweso-system \
+  --version "${CHART_VERSION}" \
   --set-string image.tag="${CHART_VERSION}" \
   --set-string config.singleOriginUrl='https://vaultwarden.example.com' \
   --set-string credentials.existingSecret.name=bweso-credentials \
@@ -45,6 +48,7 @@ Install the webhook for Bitwarden Cloud US:
 ```bash
 helm upgrade --install bweso "${CHART_REF}" \
   --namespace bweso-system \
+  --version "${CHART_VERSION}" \
   --set-string image.tag="${CHART_VERSION}" \
   --set-string config.identityUrl='https://identity.bitwarden.com' \
   --set-string config.apiUrl='https://api.bitwarden.com' \
@@ -54,6 +58,13 @@ helm upgrade --install bweso "${CHART_REF}" \
 
 Use `https://identity.bitwarden.eu` and `https://api.bitwarden.eu` for
 Bitwarden EU.
+
+For environments that cannot pull OCI charts, use the GitHub Release archive
+instead and omit `--version`:
+
+```bash
+CHART_REF="https://github.com/ponchia/bitwarden-eso-provider/releases/download/v${CHART_VERSION}/bitwarden-eso-provider-${CHART_VERSION}.tgz"
+```
 
 `networkPolicy.enabled` is false by default. Enable it only after tailoring the
 ingress rules for ESO/Prometheus and the egress rules for DNS plus your
@@ -212,6 +223,7 @@ Prometheus Operator CRDs are installed, enable a `ServiceMonitor`:
 ```bash
 helm upgrade --install bweso "${CHART_REF}" \
   --namespace bweso-system \
+  --version "${CHART_VERSION}" \
   --reuse-values \
   --set metrics.serviceMonitor.enabled=true
 ```

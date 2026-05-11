@@ -1,7 +1,7 @@
 # Release Readiness Plan
 
 This file records the release-readiness decisions for Bitwarden ESO Provider.
-`v0.1.1` is public, so this document now describes the current baseline and the
+`v0.1.2` is public, so this document now describes the current baseline and the
 rules for future releases.
 
 ## Product Shape
@@ -50,12 +50,13 @@ items.
 - Keep chart NetworkPolicy opt-in for `v0.1.x`; backend, DNS, ESO, and
   Prometheus reachability is cluster-specific and a too-generic default can
   break first installs.
-- Attach the packaged Helm chart to tagged GitHub Releases after the release
-  image manifest has been built and scanned.
+- Publish the packaged Helm chart to GHCR as an OCI chart and attach the same
+  chart archive to tagged GitHub Releases after the release image manifest has
+  been built and scanned.
 
 ## Current Validation Baseline
 
-The public `v0.1.1` baseline has been validated with:
+The public `v0.1.2` baseline has been validated with:
 
 - CI gates for formatting, clippy, tests with coverage, Helm rendering,
   markdown linting, observability examples, Gitleaks, Trivy filesystem scanning,
@@ -68,8 +69,8 @@ The public `v0.1.1` baseline has been validated with:
   selector policy enabled.
 - `scripts/live-eso-smoke.sh` against Bitwarden Cloud with selector policy
   enabled.
-- A tagged GitHub Release that publishes a multi-arch image and a packaged Helm
-  chart from the release commit.
+- A tagged GitHub Release that publishes a multi-arch image, a GHCR OCI Helm
+  chart, and a packaged Helm chart archive from the release commit.
 - Public repository controls for branch protection, tag protection, secret
   scanning, Dependabot alerts, security policy, issue templates, and CODEOWNERS.
 
@@ -79,8 +80,8 @@ For each release:
 
 - Run the GitHub CI workflow to green.
 - Run the release workflow from the exact tag or commit being released.
-- Confirm the release chart artifact is attached only after the image manifest
-  and release image scan succeed.
+- Confirm the release OCI chart and attached chart artifact are published only
+  after the image manifest and release image scan succeed.
 - Run live smoke tests against Vaultwarden and Bitwarden Cloud with selector
   policy enabled.
 - Record the image index digest and chart checksum in the GitHub Release notes.
@@ -92,5 +93,5 @@ For each release:
 - Attachment support.
 - Stale-cache-on-upstream-outage behavior.
 - Disposable kind integration that does not require private credentials.
-- OCI Helm chart publishing or GitHub Pages chart repository.
+- GitHub Pages chart repository.
 - Native operator or native ESO provider.

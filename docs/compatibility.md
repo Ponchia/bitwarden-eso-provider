@@ -60,17 +60,17 @@ The live smoke test can be aimed at either layout:
 
 Live verification status:
 
-- Vaultwarden single-origin: verified against the exact `v0.1.1` release chart
+- Vaultwarden single-origin: verified against the exact `v0.1.2` release chart
   and image on a real k3s cluster on 2026-05-11, including selector policy,
   single-field and whole-item sync, target Secret recreation, webhook restart,
   negative cases, and redacted metrics.
 - Bitwarden Cloud US split endpoints: verified against a dedicated live account
-  and the exact `v0.1.1` release chart and image on a real k3s cluster on
+  and the exact `v0.1.2` release chart and image on a real k3s cluster on
   2026-05-11, including selector policy, single-field and whole-item sync,
   target Secret recreation, webhook restart, negative cases, and redacted
   metrics.
 
-The `v0.1.1` live verification environment used:
+The `v0.1.2` live verification environment used:
 
 - k3s server `v1.34.5+k3s1`.
 - External Secrets Operator `v2.4.1`.

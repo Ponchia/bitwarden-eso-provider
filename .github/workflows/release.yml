@@ -280,6 +280,7 @@ jobs:
       HELM_VERSION: v4.1.4
     permissions:
       contents: write
+      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -294,6 +295,35 @@ jobs:
           mkdir -p dist
           helm lint deploy/helm/bitwarden-eso-provider -f deploy/helm/lint-values.yaml
           helm package deploy/helm/bitwarden-eso-provider --destination dist
+
+      - name: Log in to GHCR for Helm
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | helm registry login ghcr.io \
+                --username "${{ github.actor }}" \
+                --password-stdin
+
+      - name: Push chart to GHCR OCI
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          chart_archive="$(find dist -maxdepth 1 -name '*.tgz' -print -quit)"
+          if [ -z "$chart_archive" ]; then
+            echo "No packaged chart archive found" >&2
+            exit 1
+          fi
+
+          oci_registry="oci://ghcr.io/${owner}/charts"
+          helm push "$chart_archive" "$oci_registry" | tee /tmp/helm-push.txt
+
+          {
+            echo "### Helm OCI chart"
+            echo
+            echo "- Registry: \`$oci_registry\`"
+            echo "- Archive: \`$(basename "$chart_archive")\`"
+            sed 's/^/- /' /tmp/helm-push.txt
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload chart artifact
         uses: actions/upload-artifact@v7

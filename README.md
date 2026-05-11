@@ -34,7 +34,7 @@ the External Secrets Operator project.
 
 ## Status
 
-`v0.1.1` is the current public release. The provider is functional and
+`v0.1.2` is the current public release. The provider is functional and
 live-tested, but chart values, image tags, and crate APIs may still change
 before `v1.0.0`. Pin chart and image versions for every real deployment.
 
@@ -46,7 +46,7 @@ Verified so far:
 - ESO sync through `remoteRef` and `dataFrom.extract`.
 - Target Secret recreation, webhook restart, expected not-found failures,
   selector-policy denial, health probes, and redacted metrics.
-- Exact `v0.1.1` release chart and image smoke tests against Vaultwarden and
+- Exact `v0.1.2` release chart and image smoke tests against Vaultwarden and
   Bitwarden Cloud.
 - Prometheus Operator `ServiceMonitor` / `PrometheusRule` compatibility, both
   through Helm rendering and server-side Kubernetes validation.
@@ -115,10 +115,10 @@ Prerequisites:
 
 - Kubernetes cluster.
 - [External Secrets Operator](https://external-secrets.io/latest/) installed.
-- Helm 3.
+- Helm 3.8+ or Helm 4 for OCI chart support.
 - A dedicated Bitwarden or Vaultwarden user API key.
 - The user's master password.
-- A released chart archive. The chart defaults to the matching
+- The released OCI Helm chart. The chart defaults to the matching
   `ghcr.io/ponchia/bitwarden-eso-provider` image version.
 
 Create the provider namespace and runtime credentials:
@@ -136,8 +136,8 @@ kubectl -n bweso-system create secret generic bweso-credentials \
 Set the release chart reference:
 
 ```bash
-CHART_VERSION=0.1.1
-CHART_REF="https://github.com/ponchia/bitwarden-eso-provider/releases/download/v${CHART_VERSION}/bitwarden-eso-provider-${CHART_VERSION}.tgz"
+CHART_VERSION=0.1.2
+CHART_REF="oci://ghcr.io/ponchia/charts/bitwarden-eso-provider"
 ```
 
 Install the provider for Vaultwarden or another single-origin Bitwarden server:
@@ -145,6 +145,7 @@ Install the provider for Vaultwarden or another single-origin Bitwarden server:
 ```bash
 helm upgrade --install bweso "${CHART_REF}" \
   --namespace bweso-system \
+  --version "${CHART_VERSION}" \
   --set-string config.singleOriginUrl='https://vaultwarden.example.com' \
   --set-string credentials.existingSecret.name='bweso-credentials' \
   --set-string selectorPolicy.allowedKeys[0]='id:00000000-0000-0000-0000-000000000000'
@@ -155,6 +156,7 @@ For Bitwarden Cloud US, use split endpoints instead:
 ```bash
 helm upgrade --install bweso "${CHART_REF}" \
   --namespace bweso-system \
+  --version "${CHART_VERSION}" \
   --set-string config.identityUrl='https://identity.bitwarden.com' \
   --set-string config.apiUrl='https://api.bitwarden.com' \
   --set-string credentials.existingSecret.name='bweso-credentials' \
@@ -164,8 +166,15 @@ helm upgrade --install bweso "${CHART_REF}" \
 For Bitwarden Cloud EU, use `https://identity.bitwarden.eu` and
 `https://api.bitwarden.eu`.
 
-For unreleased `main` builds, clone the repository and replace `"${CHART_REF}"`
-with `./deploy/helm/bitwarden-eso-provider`.
+The same chart is also attached to each GitHub Release as a `.tgz` archive for
+checksum verification and environments that do not pull Helm charts from OCI:
+
+```bash
+CHART_ARCHIVE_URL="https://github.com/ponchia/bitwarden-eso-provider/releases/download/v${CHART_VERSION}/bitwarden-eso-provider-${CHART_VERSION}.tgz"
+```
+
+For unreleased `main` builds, clone the repository, replace `"${CHART_REF}"`
+with `./deploy/helm/bitwarden-eso-provider`, and omit `--version`.
 
 Create a token-only ESO auth Secret in each workload namespace that will use a
 namespace-local `SecretStore`:
@@ -339,6 +348,7 @@ installed. Using the same `CHART_REF` from the install step:
 ```bash
 helm upgrade --install bweso "${CHART_REF}" \
   --namespace bweso-system \
+  --version "${CHART_VERSION}" \
   --reuse-values \
   --set metrics.serviceMonitor.enabled=true
 ```
