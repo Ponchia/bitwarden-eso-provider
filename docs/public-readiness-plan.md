@@ -1,7 +1,8 @@
-# Public Readiness Plan
+# Release Readiness Plan
 
-This file records the pre-`v0.1.0` public-readiness decisions for Bitwarden ESO
-Provider.
+This file records the release-readiness decisions for Bitwarden ESO Provider.
+`v0.1.0` is public, so this document now describes the current baseline and the
+rules for future releases.
 
 ## Product Shape
 
@@ -13,7 +14,7 @@ refresh intervals, target `Secret` lifecycle, deletion behavior, status
 conditions, and GitOps integration. A native operator, native ESO provider,
 Secrets Store CSI provider, and PushSecret support are later roadmap items.
 
-## Required For Public Release
+## Required For Public Releases
 
 - Keep the repository name `bitwarden-eso-provider`, but consistently describe
   the project as a Bitwarden Password Manager / Vaultwarden vault-item ESO
@@ -48,30 +49,41 @@ Secrets Store CSI provider, and PushSecret support are later roadmap items.
 - Keep chart NetworkPolicy opt-in for `v0.1.0`; backend, DNS, ESO, and
   Prometheus reachability is cluster-specific and a too-generic default can
   break first installs.
-- Attach the packaged Helm chart to tagged GitHub Releases.
+- Attach the packaged Helm chart to tagged GitHub Releases after the release
+  image manifest has been built and scanned.
 
-## Validation Gate
+## Current Validation Baseline
 
-Before making the repository public:
+The public `v0.1.0` baseline has been validated with:
 
-- Run the full Rust and Helm checks from `AGENTS.md`.
-- Run the local security/quality gates used by CI: Gitleaks, Trivy, cargo-deny,
-  Checkov, Semgrep, CodeQL, and SonarQube where available.
-- Run `scripts/live-eso-smoke.sh` against Vaultwarden on the k3s cluster with
+- CI gates for formatting, clippy, tests with coverage, Helm rendering,
+  markdown linting, observability examples, Gitleaks, Trivy filesystem scanning,
+  cargo-deny, Checkov, and Dockerfile build checks.
+- CodeQL code scanning for Rust and GitHub Actions workflow files.
+- Local advisory scans used during release review, including Semgrep and
+  SonarQube where available. These are review tools unless they are present in
+  the GitHub workflow for that commit.
+- `scripts/live-eso-smoke.sh` against Vaultwarden on a k3s cluster with
   selector policy enabled.
-- Run `scripts/live-eso-smoke.sh` against Bitwarden Cloud with selector policy
+- `scripts/live-eso-smoke.sh` against Bitwarden Cloud with selector policy
   enabled.
-- Verify the release workflow has a full pre-publish gate before publishing
-  images or attaching chart artifacts.
-- Confirm CI is green after pushing.
-- Keep the repo private until the branch is clean, pushed, smoke-tested, and
-  release docs are coherent.
+- A tagged GitHub Release that publishes a multi-arch image and a packaged Helm
+  chart from the release commit.
+- Public repository controls for branch protection, tag protection, secret
+  scanning, Dependabot alerts, security policy, issue templates, and CODEOWNERS.
 
-After making the repository public:
+## Future Release Gate
 
-- Enable documented `main` branch protection immediately.
-- Confirm secret scanning, Dependabot alerts, security policy, issue templates,
-  and CODEOWNERS are active.
+For each release:
+
+- Run the GitHub CI workflow to green.
+- Run the release workflow from the exact tag or commit being released.
+- Confirm the release chart artifact is attached only after the image manifest
+  and release image scan succeed.
+- Run live smoke tests against Vaultwarden and Bitwarden Cloud with selector
+  policy enabled.
+- Record the image index digest and chart checksum in the release notes or
+  release checklist.
 
 ## Deferred
 

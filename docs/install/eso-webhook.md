@@ -74,6 +74,22 @@ property on that item and can request whole-item extraction unless your ESO
 manifests, RBAC, and GitOps review prevent it. Use one dedicated provider
 credential per namespace or trust boundary for strict isolation.
 
+## Recommended Production Pattern
+
+For each namespace or trust boundary:
+
+- use a dedicated Bitwarden/Vaultwarden account or API key;
+- install the provider with exact `id:<item-id>` entries in
+  `selectorPolicy.allowedKeys`;
+- use a namespace-local `SecretStore`;
+- put only the webhook bearer token in workload namespaces;
+- keep the Bitwarden/Vaultwarden client secret and master password in the
+  provider namespace;
+- rotate the Bitwarden/Vaultwarden API key, master password, and webhook token
+  like other infrastructure credentials;
+- avoid `ClusterSecretStore` unless the store is intentionally shared and every
+  namespace that can reference it may read the allowed items.
+
 Create a token-only webhook auth Secret in each namespace that uses a
 namespace-local `SecretStore`:
 

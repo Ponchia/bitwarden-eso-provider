@@ -7,10 +7,8 @@ Required before calling a release generally usable:
   and `CODEOWNERS`.
 - Apply the GitHub repository settings documented in
   [`repository-governance.md`](repository-governance.md).
-- Make the repository public only after the branch is clean, pushed, and CI is
-  green.
-- Enable `main` branch protection immediately after GitHub allows it for the
-  repository.
+- Confirm the release branch is clean, pushed, and CI is green.
+- Confirm `main` branch protection and release tag protection are active.
 - Tag and publish a multi-arch image from GitHub Actions.
 - Run `scripts/live-eso-smoke.sh` against real Vaultwarden and Bitwarden Cloud
   accounts with k3s or a kind cluster with ESO installed, with selector policy
@@ -43,6 +41,18 @@ Required before calling a release generally usable:
   not property scoped.
 - Verify unsupported organization/shared items and attachment properties fail
   explicitly and are documented.
+
+## v0.1.0 Artifact Evidence
+
+- Git tag: `v0.1.0`.
+- Source commit: `03cdd76e11c02799b379efd6cdd447216894a493`.
+- Image: `ghcr.io/ponchia/bitwarden-eso-provider:0.1.0`.
+- Image index digest:
+  `sha256:4847296e24f38c25e690da922264ec1f90e9f9ebf99d93a8c9775f7681134e1f`.
+- Helm chart:
+  `https://github.com/Ponchia/bitwarden-eso-provider/releases/download/v0.1.0/bitwarden-eso-provider-0.1.0.tgz`.
+- Helm chart SHA256:
+  `335053bd73b03a66d136c5bfa8081e5c3356b3b06a6af8e1721ee602c192b17a`.
 
 Nice to have before `v1.0.0`:
 

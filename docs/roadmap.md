@@ -1,11 +1,10 @@
 # Roadmap
 
-This roadmap separates what is already in the pre-release codebase from work
-that should wait until after `v0.1.0`.
+This roadmap separates what shipped in `v0.1.0` from follow-up work.
 
-## v0.1.0 Release Candidate
+## v0.1.0
 
-The current release-candidate scope is:
+The first public release includes:
 
 - Bitwarden Password Manager and Vaultwarden vault-item sync through External
   Secrets Operator's generic webhook provider.
@@ -25,21 +24,10 @@ The current release-candidate scope is:
 - Helm chart, ESO examples, NetworkPolicy examples, Reloader example,
   PrometheusRule example, Grafana dashboard, threat model, release checklist,
   and live smoke-test script.
-- Multi-arch release workflow with GHCR image publishing, SBOM/provenance, and
-  Helm chart attachment to GitHub Releases.
-
-Before the repository is made public, the remaining work is operational:
-
-- Keep docs aligned with the actual release state.
-- Push a clean branch and confirm GitHub Actions is green.
-- Run the release workflow or publish a tag to produce the exact image that
-  will be smoke-tested.
-- Run `scripts/live-eso-smoke.sh` against Vaultwarden and Bitwarden Cloud with
-  selector policy enabled.
-- Make the repository public only after the release docs, CI, and live smoke
-  checks are coherent.
-- Enable the documented `main` branch protection and security settings as soon
-  as GitHub exposes them for the public repository.
+- Multi-arch release workflow with GHCR image publishing, SBOM/provenance,
+  release image scanning, and Helm chart attachment to GitHub Releases.
+- Live smoke verification against Vaultwarden and Bitwarden Cloud using the
+  exact release chart and image.
 
 ## After v0.1.0
 

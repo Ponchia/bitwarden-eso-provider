@@ -34,8 +34,9 @@ the External Secrets Operator project.
 
 ## Status
 
-Pre-release. The provider is functional and live-tested, but chart values,
-image tags, and crate APIs may still change before the first public tag.
+`v0.1.0` is the first public release. The provider is functional and
+live-tested, but chart values, image tags, and crate APIs may still change
+before `v1.0.0`. Pin chart and image versions for every real deployment.
 
 Verified so far:
 
@@ -45,12 +46,10 @@ Verified so far:
 - ESO sync through `remoteRef` and `dataFrom.extract`.
 - Target Secret recreation, webhook restart, expected not-found failures,
   selector-policy denial, health probes, and redacted metrics.
+- Exact `v0.1.0` release chart and image smoke tests against Vaultwarden and
+  Bitwarden Cloud.
 - Prometheus Operator `ServiceMonitor` / `PrometheusRule` compatibility, both
   through Helm rendering and server-side Kubernetes validation.
-
-Use a dedicated test account first. Do not aim this at a primary day-to-day
-vault until you have reviewed the [threat model](docs/threat-model.md) and
-understand the namespace isolation model.
 
 ## When To Use It
 
@@ -108,6 +107,10 @@ Use something else when:
 
 ## Quick Start
 
+> [!IMPORTANT]
+> Use a dedicated Bitwarden/Vaultwarden account for the provider. Review the
+> [threat model](docs/threat-model.md) before production use.
+
 Prerequisites:
 
 - Kubernetes cluster.
@@ -115,8 +118,8 @@ Prerequisites:
 - Helm 3.
 - A dedicated Bitwarden or Vaultwarden user API key.
 - The user's master password.
-- A provider image tag or digest. Released chart archives are attached to GitHub
-  Releases and default to the matching provider image version.
+- A released chart archive. The chart defaults to the matching
+  `ghcr.io/ponchia/bitwarden-eso-provider` image version.
 
 Create the provider namespace and runtime credentials:
 
@@ -142,8 +145,6 @@ Install the provider for Vaultwarden or another single-origin Bitwarden server:
 ```bash
 helm upgrade --install bweso "${CHART_REF}" \
   --namespace bweso-system \
-  --set-string image.repository='ghcr.io/ponchia/bitwarden-eso-provider' \
-  --set-string image.tag="${CHART_VERSION}" \
   --set-string config.singleOriginUrl='https://vaultwarden.example.com' \
   --set-string credentials.existingSecret.name='bweso-credentials' \
   --set-string selectorPolicy.allowedKeys[0]='id:00000000-0000-0000-0000-000000000000'
@@ -154,8 +155,6 @@ For Bitwarden Cloud US, use split endpoints instead:
 ```bash
 helm upgrade --install bweso "${CHART_REF}" \
   --namespace bweso-system \
-  --set-string image.repository='ghcr.io/ponchia/bitwarden-eso-provider' \
-  --set-string image.tag="${CHART_VERSION}" \
   --set-string config.identityUrl='https://identity.bitwarden.com' \
   --set-string config.apiUrl='https://api.bitwarden.com' \
   --set-string credentials.existingSecret.name='bweso-credentials' \
@@ -300,6 +299,25 @@ restrict RBAC, and avoid granting broad read access to generated Secrets.
 
 Read the full [threat model](docs/threat-model.md) before production use.
 
+## Recommended Production Pattern
+
+For each namespace or trust boundary:
+
+- Use a dedicated Bitwarden/Vaultwarden account or API key whose vault access is
+  limited to that boundary.
+- Install the provider with exact `id:<item-id>` entries in
+  `selectorPolicy.allowedKeys`; use prefixes only when item IDs are deliberately
+  grouped and reviewed.
+- Use namespace-local `SecretStore` resources. Put only the webhook bearer token
+  in workload namespaces; keep the Bitwarden/Vaultwarden client secret and
+  master password in the provider namespace.
+- Rotate the Bitwarden/Vaultwarden API key, master password, and webhook token
+  on the same schedule as other infrastructure credentials, and force an ESO
+  reconcile after rotation.
+- Avoid `ClusterSecretStore` unless the shared store is intentionally a shared
+  security boundary and every namespace that can reference it may read the
+  allowed items.
+
 ## Observability
 
 The provider exposes:
@@ -313,7 +331,7 @@ outcomes, error classes, latency, cache hits, cache refreshes, and last
 successful cache refresh age.
 
 The Helm chart can render a `ServiceMonitor` when Prometheus Operator CRDs are
-installed:
+installed. Using the same `CHART_REF` from the install step:
 
 ```bash
 helm upgrade --install bweso "${CHART_REF}" \
@@ -368,24 +386,16 @@ observable Kubernetes integration.
 
 ## Repository Layout
 
-```text
-crates/bweso-core
-  Shared request/response and secret document types
-crates/bweso-bitwarden
-  Bitwarden-compatible API, crypto, and resolver
-crates/bitwarden-eso-provider
-  HTTP adapter for ESO's webhook provider
-deploy/eso
-  SecretStore, ExternalSecret, Reloader, and NetworkPolicy examples
-deploy/helm
-  Helm chart
-docs
-  Architecture, install, compatibility, operations, testing, security
-examples
-  Grafana dashboard and PrometheusRule examples
-references
-  Reference repository manifest and notes
-```
+| Path | Purpose |
+| --- | --- |
+| [crates/bweso-core](crates/bweso-core) | Shared request/response and secret document types. |
+| [crates/bweso-bitwarden](crates/bweso-bitwarden) | Bitwarden-compatible API client, crypto, cache, and selector resolver. |
+| [crates/bitwarden-eso-provider](crates/bitwarden-eso-provider) | HTTP webhook adapter used by ESO. |
+| [deploy/eso](deploy/eso) | `SecretStore`, `ExternalSecret`, Reloader, and NetworkPolicy examples. |
+| [deploy/helm](deploy/helm) | Helm chart for the provider deployment. |
+| [docs](docs) | Architecture, installation, compatibility, operations, testing, and security documentation. |
+| [examples](examples) | Grafana dashboard and PrometheusRule examples. |
+| [references](references) | Reference repository manifest and notes. |
 
 ## Development
 
@@ -459,5 +469,4 @@ secret-value exposure, auth bypasses, or selector-redaction failures.
 
 ## License
 
-Apache-2.0. Keep this repository free of copied implementation code from
-reference projects unless a license review explicitly approves it.
+Apache-2.0. See [LICENSE](LICENSE).
