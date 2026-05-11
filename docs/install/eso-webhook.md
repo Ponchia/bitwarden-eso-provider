@@ -27,7 +27,7 @@ unreleased `main` builds, clone the repository and use
 Set the release chart reference:
 
 ```bash
-CHART_VERSION=0.1.2
+CHART_VERSION=0.1.3
 CHART_REF="oci://ghcr.io/ponchia/charts/bitwarden-eso-provider"
 ```
 

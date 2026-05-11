@@ -34,7 +34,7 @@ the External Secrets Operator project.
 
 ## Status
 
-`v0.1.2` is the current public release. The provider is functional and
+`v0.1.3` is the current public release. The provider is functional and
 live-tested, but chart values, image tags, and crate APIs may still change
 before `v1.0.0`. Pin chart and image versions for every real deployment.
 
@@ -46,10 +46,9 @@ Verified so far:
 - ESO sync through `remoteRef` and `dataFrom.extract`.
 - Target Secret recreation, webhook restart, expected not-found failures,
   selector-policy denial, health probes, and redacted metrics.
-- Exact `v0.1.2` OCI release chart and image smoke test against Vaultwarden.
-- Bitwarden Cloud US split endpoint live smoke was verified for `v0.1.1`; the
-  `v0.1.2` release changes packaging/version metadata, not the provider
-  protocol implementation.
+- Exact `v0.1.3` OCI release chart and image smoke test against Vaultwarden.
+- Bitwarden Cloud US split endpoint live smoke was verified for `v0.1.1`;
+  `v0.1.3` does not change the provider protocol implementation.
 - Prometheus Operator `ServiceMonitor` / `PrometheusRule` compatibility, both
   through Helm rendering and server-side Kubernetes validation.
 
@@ -138,7 +137,7 @@ kubectl -n bweso-system create secret generic bweso-credentials \
 Set the release chart reference:
 
 ```bash
-CHART_VERSION=0.1.2
+CHART_VERSION=0.1.3
 CHART_REF="oci://ghcr.io/ponchia/charts/bitwarden-eso-provider"
 ```
 

@@ -2,8 +2,8 @@ apiVersion: v2
 name: bitwarden-eso-provider
 description: External Secrets Operator provider for Bitwarden Password Manager and Vaultwarden.
 type: application
-version: 0.1.2
-appVersion: "0.1.2"
+version: 0.1.3
+appVersion: "0.1.3"
 home: https://github.com/ponchia/bitwarden-eso-provider
 sources:
   - https://github.com/ponchia/bitwarden-eso-provider
