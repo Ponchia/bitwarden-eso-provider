@@ -22,6 +22,11 @@ Provider.
 - Security features: CodeQL code scanning, secret scanning, push protection,
   Dependabot alerts, Dependabot security updates, security policy, and private
   vulnerability reporting should stay enabled.
+- Actions policy: selected actions only. Allow GitHub-owned actions and the
+  explicitly listed third-party workflow actions used by this repository.
+- Default workflow token permission: read-only. Jobs that publish images,
+  upload code scanning results, or attach release artifacts must request their
+  additional permissions explicitly.
 - Package visibility: the release image package must be public so Kubernetes
   clusters can pull `ghcr.io/ponchia/bitwarden-eso-provider:<version>` without
   registry credentials.
@@ -59,6 +64,22 @@ once external contribution volume justifies them.
 Only maintainers should be able to push tags matching `v*`. Release tags publish
 multi-arch images and Helm chart artifacts, so tag protection must remain active
 for those tags.
+
+## Allowed Workflow Actions
+
+Keep the repository Actions policy restricted to GitHub-owned actions plus these
+third-party actions used by CI and release workflows:
+
+- `aquasecurity/trivy-action`
+- `azure/setup-helm`
+- `docker/build-push-action`
+- `docker/login-action`
+- `docker/metadata-action`
+- `docker/setup-buildx-action`
+- `dtolnay/rust-toolchain`
+- `softprops/action-gh-release`
+- `Swatinem/rust-cache`
+- `taiki-e/install-action`
 
 ## Dependabot Policy
 

@@ -34,7 +34,7 @@ the External Secrets Operator project.
 
 ## Status
 
-`v0.1.0` is the first public release. The provider is functional and
+`v0.1.1` is the current public release. The provider is functional and
 live-tested, but chart values, image tags, and crate APIs may still change
 before `v1.0.0`. Pin chart and image versions for every real deployment.
 
@@ -46,7 +46,7 @@ Verified so far:
 - ESO sync through `remoteRef` and `dataFrom.extract`.
 - Target Secret recreation, webhook restart, expected not-found failures,
   selector-policy denial, health probes, and redacted metrics.
-- Exact `v0.1.0` release chart and image smoke tests against Vaultwarden and
+- Exact `v0.1.1` release chart and image smoke tests against Vaultwarden and
   Bitwarden Cloud.
 - Prometheus Operator `ServiceMonitor` / `PrometheusRule` compatibility, both
   through Helm rendering and server-side Kubernetes validation.
@@ -97,7 +97,7 @@ Use something else when:
 - Bitwarden Secrets Manager (`bws`) APIs are not supported.
 - Shared organization items fail with `unsupported_shared_item` until
   organization-key decryption is implemented and live-tested.
-- Attachment properties fail with `unsupported_attachment`. For `v0.1.0`, store
+- Attachment properties fail with `unsupported_attachment`. For `v0.1.x`, store
   certificates, kubeconfigs, SSH keys, and multiline config in secure notes or
   custom fields.
 - Interactive two-factor and new-device challenge flows are not supported for
@@ -136,7 +136,7 @@ kubectl -n bweso-system create secret generic bweso-credentials \
 Set the release chart reference:
 
 ```bash
-CHART_VERSION=0.1.0
+CHART_VERSION=0.1.1
 CHART_REF="https://github.com/ponchia/bitwarden-eso-provider/releases/download/v${CHART_VERSION}/bitwarden-eso-provider-${CHART_VERSION}.tgz"
 ```
 
@@ -413,6 +413,7 @@ Coverage is tracked as a regression signal, not as a release goal by itself:
 ```bash
 cargo install cargo-llvm-cov --locked
 cargo llvm-cov --locked --workspace --all-targets --fail-under-lines 80 --summary-only
+mkdir -p coverage
 cargo llvm-cov --locked --workspace --all-targets \
   --lcov --output-path coverage/lcov.info
 ```

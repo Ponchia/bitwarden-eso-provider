@@ -1,7 +1,7 @@
 # Release Readiness Plan
 
 This file records the release-readiness decisions for Bitwarden ESO Provider.
-`v0.1.0` is public, so this document now describes the current baseline and the
+`v0.1.1` is public, so this document now describes the current baseline and the
 rules for future releases.
 
 ## Product Shape
@@ -9,10 +9,11 @@ rules for future releases.
 The first public release remains an External Secrets Operator webhook provider
 for Bitwarden Password Manager and Vaultwarden vault items.
 
-Do not build a native Kubernetes operator before `v0.1.0`. ESO already owns
-refresh intervals, target `Secret` lifecycle, deletion behavior, status
-conditions, and GitOps integration. A native operator, native ESO provider,
-Secrets Store CSI provider, and PushSecret support are later roadmap items.
+Do not build a native Kubernetes operator during the `v0.1.x` release line. ESO
+already owns refresh intervals, target `Secret` lifecycle, deletion behavior,
+status conditions, and GitOps integration. A native operator, native ESO
+provider, Secrets Store CSI provider, and PushSecret support are later roadmap
+items.
 
 ## Required For Public Releases
 
@@ -46,7 +47,7 @@ Secrets Store CSI provider, and PushSecret support are later roadmap items.
   Bitwarden login fields such as `username` and `password`.
 - Document intentional empty target keys as ESO template data with
   `mergePolicy: Merge`.
-- Keep chart NetworkPolicy opt-in for `v0.1.0`; backend, DNS, ESO, and
+- Keep chart NetworkPolicy opt-in for `v0.1.x`; backend, DNS, ESO, and
   Prometheus reachability is cluster-specific and a too-generic default can
   break first installs.
 - Attach the packaged Helm chart to tagged GitHub Releases after the release
@@ -54,7 +55,7 @@ Secrets Store CSI provider, and PushSecret support are later roadmap items.
 
 ## Current Validation Baseline
 
-The public `v0.1.0` baseline has been validated with:
+The public `v0.1.1` baseline has been validated with:
 
 - CI gates for formatting, clippy, tests with coverage, Helm rendering,
   markdown linting, observability examples, Gitleaks, Trivy filesystem scanning,
@@ -82,8 +83,8 @@ For each release:
   and release image scan succeed.
 - Run live smoke tests against Vaultwarden and Bitwarden Cloud with selector
   policy enabled.
-- Record the image index digest and chart checksum in the release notes or
-  release checklist.
+- Record the image index digest and chart checksum in the GitHub Release notes.
+  Generated artifact hashes should not require a follow-up commit after tagging.
 
 ## Deferred
 

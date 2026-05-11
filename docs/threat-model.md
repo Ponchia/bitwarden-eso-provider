@@ -70,7 +70,7 @@
   RBAC can control who may reference it, but the Bitwarden/Vaultwarden account
   and selector policy still define the data that can be read.
 
-## Unsupported Surfaces For v0.1.0
+## Unsupported Surfaces For v0.1.x
 
 - Bitwarden Secrets Manager (`bws`) is a separate product surface and is not
   handled by this provider.

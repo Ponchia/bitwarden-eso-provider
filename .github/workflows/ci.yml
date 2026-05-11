@@ -28,7 +28,7 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-llvm-cov
+          tool: cargo-llvm-cov@0.8.6
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -42,12 +42,16 @@ jobs:
   helm:
     name: Helm
     runs-on: ubuntu-latest
+    env:
+      HELM_VERSION: v4.1.4
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
       - name: Install Helm
         uses: azure/setup-helm@v5
+        with:
+          version: ${{ env.HELM_VERSION }}
 
       - name: Lint chart
         run: helm lint deploy/helm/bitwarden-eso-provider -f deploy/helm/lint-values.yaml
@@ -75,7 +79,7 @@ jobs:
           --set-string 'metrics.serviceMonitor.labels.release=prometheus'
 
       - name: Validate documentation
-        run: npx --yes markdownlint-cli2 '**/*.md'
+        run: npx --yes markdownlint-cli2@0.22.1 '**/*.md'
 
       - name: Validate observability examples
         run: |
@@ -87,7 +91,9 @@ jobs:
     name: Security
     runs-on: ubuntu-latest
     env:
+      CHECKOV_VERSION: 3.2.526
       GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_LINUX_X64_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -97,6 +103,7 @@ jobs:
       - name: Install Gitleaks
         run: |
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
+          printf '%s  %s\n' "${GITLEAKS_LINUX_X64_SHA256}" /tmp/gitleaks.tar.gz | sha256sum -c -
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           sudo install /tmp/gitleaks /usr/local/bin/gitleaks
 
@@ -128,7 +135,7 @@ jobs:
         run: cargo deny --locked check advisories licenses bans sources
 
       - name: Install Checkov
-        run: python -m pip install --upgrade checkov
+        run: python -m pip install "checkov==${CHECKOV_VERSION}"
 
       - name: Checkov Helm scan
         run: >

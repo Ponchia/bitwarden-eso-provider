@@ -1,8 +1,9 @@
 # Roadmap
 
-This roadmap separates what shipped in `v0.1.0` from follow-up work.
+This roadmap separates what shipped in the `v0.1.x` release line from
+follow-up work.
 
-## v0.1.0
+## v0.1.x
 
 The first public release includes:
 
@@ -29,7 +30,7 @@ The first public release includes:
 - Live smoke verification against Vaultwarden and Bitwarden Cloud using the
   exact release chart and image.
 
-## After v0.1.0
+## After v0.1.x
 
 High-value follow-up work:
 
@@ -48,7 +49,7 @@ High-value follow-up work:
 - Revisit a native Kubernetes controller only if ESO cannot cover important
   workflows cleanly.
 
-## Not Planned For v0.1.0
+## Not Planned For v0.1.x
 
 - Bitwarden Secrets Manager (`bws`) support. Use Bitwarden's official Secrets
   Manager integrations for that product surface.

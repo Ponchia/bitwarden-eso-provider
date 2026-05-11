@@ -42,17 +42,26 @@ Required before calling a release generally usable:
 - Verify unsupported organization/shared items and attachment properties fail
   explicitly and are documented.
 
-## v0.1.0 Artifact Evidence
+## Artifact Evidence
 
-- Git tag: `v0.1.0`.
-- Source commit: `03cdd76e11c02799b379efd6cdd447216894a493`.
-- Image: `ghcr.io/ponchia/bitwarden-eso-provider:0.1.0`.
-- Image index digest:
-  `sha256:4847296e24f38c25e690da922264ec1f90e9f9ebf99d93a8c9775f7681134e1f`.
-- Helm chart:
-  `https://github.com/Ponchia/bitwarden-eso-provider/releases/download/v0.1.0/bitwarden-eso-provider-0.1.0.tgz`.
-- Helm chart SHA256:
-  `335053bd73b03a66d136c5bfa8081e5c3356b3b06a6af8e1721ee602c192b17a`.
+Each GitHub Release must include:
+
+- Git tag.
+- Source commit.
+- Image reference.
+- Image index digest.
+- Helm chart download URL.
+- Helm chart SHA256.
+
+Generated artifact hashes belong in GitHub Release notes, not in a follow-up
+post-tag commit that makes `main` look newer than the release for documentation
+only.
+
+The first public release, `v0.1.0`, was published from source commit
+`03cdd76e11c02799b379efd6cdd447216894a493` with image index digest
+`sha256:4847296e24f38c25e690da922264ec1f90e9f9ebf99d93a8c9775f7681134e1f`
+and chart SHA256
+`335053bd73b03a66d136c5bfa8081e5c3356b3b06a6af8e1721ee602c192b17a`.
 
 Nice to have before `v1.0.0`:
 
