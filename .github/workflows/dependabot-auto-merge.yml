@@ -8,8 +8,10 @@ on:
       - completed
 
 permissions:
+  checks: read
   contents: write
   pull-requests: write
+  statuses: read
 
 jobs:
   merge-patch-update:
@@ -22,6 +24,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          WORKFLOW_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           if [ -z "$PR_NUMBER" ]; then
             echo "CI run is not attached to a pull request; skipping."
@@ -37,6 +40,12 @@ jobs:
           state="$(gh pr view "$PR_NUMBER" --repo "$REPOSITORY" --json state --jq '.state')"
           if [ "$state" != "OPEN" ]; then
             echo "Pull request #$PR_NUMBER is $state; skipping."
+            exit 0
+          fi
+
+          head_sha="$(gh pr view "$PR_NUMBER" --repo "$REPOSITORY" --json headRefOid --jq '.headRefOid')"
+          if [ "$head_sha" != "$WORKFLOW_HEAD_SHA" ]; then
+            echo "Pull request #$PR_NUMBER moved from $WORKFLOW_HEAD_SHA to $head_sha; skipping."
             exit 0
           fi
 
@@ -59,6 +68,18 @@ jobs:
           if [ -n "$disallowed" ]; then
             echo "Pull request #$PR_NUMBER is not patch-only; skipping."
             printf '%s\n' "$disallowed"
+            exit 0
+          fi
+
+          gh pr checks "$PR_NUMBER" \
+            --repo "$REPOSITORY" \
+            --required \
+            --watch \
+            --interval 10
+
+          latest_head_sha="$(gh pr view "$PR_NUMBER" --repo "$REPOSITORY" --json headRefOid --jq '.headRefOid')"
+          if [ "$latest_head_sha" != "$WORKFLOW_HEAD_SHA" ]; then
+            echo "Pull request #$PR_NUMBER moved while checks were running; skipping."
             exit 0
           fi
 

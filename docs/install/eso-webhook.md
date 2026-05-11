@@ -86,7 +86,8 @@ For each namespace or trust boundary:
 - keep the Bitwarden/Vaultwarden client secret and master password in the
   provider namespace;
 - rotate the Bitwarden/Vaultwarden API key, master password, and webhook token
-  like other infrastructure credentials;
+  like other infrastructure credentials, then restart the provider pods and
+  force an ESO reconcile;
 - avoid `ClusterSecretStore` unless the store is intentionally shared and every
   namespace that can reference it may read the allowed items.
 

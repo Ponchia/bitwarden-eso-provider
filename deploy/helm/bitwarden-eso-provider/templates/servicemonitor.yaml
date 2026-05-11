@@ -24,7 +24,7 @@ spec:
       {{- include "bweso.selectorLabels" . | nindent 6 }}
   endpoints:
     - port: http
-      path: {{ .Values.metrics.path | quote }}
+      path: /metrics
       interval: {{ .Values.metrics.serviceMonitor.interval | quote }}
       scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout | quote }}
       honorLabels: {{ .Values.metrics.serviceMonitor.honorLabels }}

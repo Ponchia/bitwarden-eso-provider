@@ -291,9 +291,6 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "path": {
-          "type": "string"
-        },
         "serviceMonitor": {
           "type": "object",
           "additionalProperties": false,

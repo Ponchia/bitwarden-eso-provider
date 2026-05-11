@@ -11,7 +11,7 @@ use std::{
 
 use anyhow::{bail, Context};
 use axum::{
-    body::Body,
+    body::{to_bytes, Body},
     extract::{MatchedPath, State},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -37,6 +37,8 @@ mod metrics;
 
 use lifecycle::Lifecycle;
 use metrics::{AppMetrics, PROMETHEUS_CONTENT_TYPE};
+
+const RESOLVE_BODY_LIMIT_BYTES: usize = 16 * 1024;
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -528,11 +530,10 @@ async fn record_http_metrics(
 
 async fn resolve(
     State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(request): Json<ResolveRequest>,
+    request: Request<Body>,
 ) -> Result<Json<SecretDocument>, (StatusCode, Json<ErrorResponse>)> {
     let started = Instant::now();
-    if !state.auth.is_authorized(&headers) {
+    if !state.auth.is_authorized(request.headers()) {
         state.metrics.record_resolve_request(
             StatusCode::UNAUTHORIZED,
             "error",
@@ -541,6 +542,16 @@ async fn resolve(
         );
         return Err(auth_error());
     }
+
+    let request = match decode_resolve_request(request).await {
+        Ok(request) => request,
+        Err(status) => {
+            state
+                .metrics
+                .record_resolve_request(status, "error", "validation", started.elapsed());
+            return Err(public_error(status, "validation"));
+        }
+    };
 
     let selector = match BitwardenSelector::try_from(request.remote_ref) {
         Ok(selector) => selector,
@@ -579,6 +590,33 @@ async fn resolve(
             Err(provider_error(&error))
         }
     }
+}
+
+async fn decode_resolve_request(request: Request<Body>) -> Result<ResolveRequest, StatusCode> {
+    if !is_json_content_type(request.headers()) {
+        return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    }
+
+    let body = to_bytes(request.into_body(), RESOLVE_BODY_LIMIT_BYTES)
+        .await
+        .map_err(|_| StatusCode::PAYLOAD_TOO_LARGE)?;
+
+    serde_json::from_slice(&body).map_err(|_| StatusCode::BAD_REQUEST)
+}
+
+fn is_json_content_type(headers: &HeaderMap) -> bool {
+    let Some(content_type) = headers.get(header::CONTENT_TYPE) else {
+        return false;
+    };
+    let Ok(content_type) = content_type.to_str() else {
+        return false;
+    };
+    let media_type = content_type.split(';').next().unwrap_or_default().trim();
+    let Some((_, subtype)) = media_type.rsplit_once('/') else {
+        return false;
+    };
+
+    subtype.eq_ignore_ascii_case("json") || subtype.to_ascii_lowercase().ends_with("+json")
 }
 
 fn auth_error() -> (StatusCode, Json<ErrorResponse>) {
@@ -1187,6 +1225,109 @@ mod tests {
             )
             .await?;
         assert_eq!(response.status(), StatusCode::OK);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn resolve_authenticates_before_json_parsing() -> TestResult {
+        let app = build_router(test_state_with_auth(
+            Arc::new(StaticProvider),
+            "expected-webhook-token",
+        ));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/v1/resolve")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from("{not-json"))?,
+            )
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let body = std::str::from_utf8(&body)?;
+        assert!(body.contains("provider authentication failed"));
+        assert!(!body.contains("not-json"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn resolve_rejects_invalid_json_after_authentication() -> TestResult {
+        let response = test_app(Arc::new(StaticProvider))
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/v1/resolve")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from("{not-json"))?,
+            )
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let body = std::str::from_utf8(&body)?;
+        assert!(body.contains("invalid resolve request"));
+        assert!(!body.contains("not-json"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn resolve_rejects_missing_json_content_type() -> TestResult {
+        let response = test_app(Arc::new(StaticProvider))
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/v1/resolve")
+                    .body(Body::from(
+                        r#"{"remoteRef":{"key":"app/database","property":"DATABASE_URL"}}"#,
+                    ))?,
+            )
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let body = std::str::from_utf8(&body)?;
+        assert!(body.contains("invalid resolve request"));
+        assert!(!body.contains("app/database"));
+        assert!(!body.contains("DATABASE_URL"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn resolve_rejects_oversized_body_without_leaking_content() -> TestResult {
+        let oversize = format!(
+            r#"{{"remoteRef":{{"key":"{}","property":"DATABASE_URL"}}}}"#,
+            "x".repeat(RESOLVE_BODY_LIMIT_BYTES)
+        );
+        let app = test_app(Arc::new(StaticProvider));
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/v1/resolve")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(oversize))?,
+            )
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let body = std::str::from_utf8(&body)?;
+        assert!(body.contains("invalid resolve request"));
+        assert!(!body.contains("DATABASE_URL"));
+
+        let response = app
+            .oneshot(Request::builder().uri("/metrics").body(Body::empty())?)
+            .await?;
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let body = std::str::from_utf8(&body)?;
+        assert!(body.contains(
+            "bweso_resolve_requests_total{outcome=\"error\",error_kind=\"validation\",status=\"413\"} 1"
+        ));
         Ok(())
     }
 

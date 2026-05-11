@@ -283,6 +283,8 @@ The provider is intentionally narrow:
 - Logs, metrics, and public error responses redact secret values, item IDs,
   item names, requested properties, API tokens, master passwords, and derived
   keys.
+- `/v1/resolve` checks bearer-token authentication before parsing the request
+  body, and resolve request bodies are capped at 16 KiB.
 - TLS verification is required for non-local Bitwarden/Vaultwarden endpoints.
 - The default Service is cluster-internal HTTP. Keep it private, require the
   bearer token, use NetworkPolicy, and put it behind TLS or mTLS when the pod
@@ -312,8 +314,9 @@ For each namespace or trust boundary:
   in workload namespaces; keep the Bitwarden/Vaultwarden client secret and
   master password in the provider namespace.
 - Rotate the Bitwarden/Vaultwarden API key, master password, and webhook token
-  on the same schedule as other infrastructure credentials, and force an ESO
-  reconcile after rotation.
+  on the same schedule as other infrastructure credentials. After updating the
+  runtime Secret, restart the provider pods so they read the new mounted files,
+  then force an ESO reconcile.
 - Avoid `ClusterSecretStore` unless the shared store is intentionally a shared
   security boundary and every namespace that can reference it may read the
   allowed items.

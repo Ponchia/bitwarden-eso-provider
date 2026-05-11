@@ -16,6 +16,12 @@ Recommended options:
 - Use GitOps-controlled force-sync annotations on `ExternalSecret` resources
   for manual refreshes.
 
+Provider runtime credentials are read once during process startup. When rotating
+the Bitwarden/Vaultwarden API key, master password, or webhook bearer token,
+update the provider credential Secret, restart the provider pods so the mounted
+files are re-read, then force ESO to reconcile affected `ExternalSecret`
+resources.
+
 The live smoke script verifies that after the webhook Deployment restarts, ESO
 can force-refresh and keep the target Secret valid. That proves provider
 statelessness, but it does not imply every consuming workload will observe the

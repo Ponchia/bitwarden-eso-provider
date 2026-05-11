@@ -48,6 +48,8 @@
 - Deletion must be controlled by ESO policies, not hidden provider behavior.
 - Provider-side selector policy must deny by default when configured and must
   return redacted `403` responses for disallowed `remoteRef.key` values.
+- The provider must authenticate `/v1/resolve` before parsing the JSON body and
+  must keep request body size bounded.
 
 ## Recommended Isolation Model
 

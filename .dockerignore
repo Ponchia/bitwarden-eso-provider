@@ -5,3 +5,17 @@ _references
 *.env
 .env
 .env.*
+*.pem
+*.key
+*.p12
+*.pfx
+coverage
+tarpaulin-report.html
+junit.xml
+.scannerwork
+.semgrep
+.aider.tags.cache.v4
+.playwright-cli
+.idea
+.vscode
+.DS_Store

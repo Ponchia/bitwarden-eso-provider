@@ -33,9 +33,10 @@ spec:
       ports:
         - protocol: TCP
           port: 443
-    # If the provider reaches Vaultwarden directly, allow the Vaultwarden pods
-    # instead. Update the port to match your container port, commonly 80 or
-    # 8080 depending on the chart/image.
+    # If the provider reaches Vaultwarden directly, the endpoint still needs to
+    # be HTTPS unless it is localhost. Prefer an ingress, mesh, or gateway that
+    # preserves the public Vaultwarden hostname for TLS verification. If your
+    # Vaultwarden pods terminate TLS themselves, adapt this direct-pod rule.
     - to:
         - namespaceSelector:
             matchLabels:
@@ -45,4 +46,4 @@ spec:
               app.kubernetes.io/name: vaultwarden
       ports:
         - protocol: TCP
-          port: 80
+          port: 443

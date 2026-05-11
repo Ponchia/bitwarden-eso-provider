@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/ponchia/bitwarden-eso-provider
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
   tag: ""
   digest: ""
 
@@ -78,8 +78,9 @@ credentials:
       clientSecret: client-secret
       masterPassword: master-password
       webhookToken: webhook-token
-  # create is useful for local smoke tests, but avoid committing secret values
-  # in Helm values files.
+  # create is useful for local smoke tests. For real installs, prefer an
+  # existing Secret because values supplied here can be retained in Helm
+  # release history.
   create: false
   clientId: ""
   clientSecret: ""
@@ -116,7 +117,6 @@ probes:
     timeoutSeconds: 1
 
 metrics:
-  path: /metrics
   serviceMonitor:
     enabled: false
     namespace: ""
@@ -167,5 +167,3 @@ networkPolicy:
     - ports:
         - protocol: TCP
           port: 443
-        - protocol: TCP
-          port: 80

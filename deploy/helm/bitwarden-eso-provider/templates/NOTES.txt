@@ -10,6 +10,6 @@ Health and metrics endpoints:
 
   http://{{ include "bweso.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/livez
   http://{{ include "bweso.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/readyz
-  http://{{ include "bweso.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}{{ .Values.metrics.path }}
+  http://{{ include "bweso.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/metrics
 
 Set metrics.serviceMonitor.enabled=true when Prometheus Operator CRDs are installed.
