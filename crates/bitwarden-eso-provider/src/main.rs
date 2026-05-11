@@ -1096,6 +1096,9 @@ mod tests {
                     Err(error) => return Err(error),
                 }
             };
+            stream.set_nonblocking(false)?;
+            stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+            stream.set_write_timeout(Some(Duration::from_secs(2)))?;
             let mut request = [0_u8; 512];
             let _ = stream.read(&mut request)?;
             stream.write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")?;
