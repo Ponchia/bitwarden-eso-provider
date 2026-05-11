@@ -75,11 +75,8 @@ Generated artifact hashes belong in GitHub Release notes, not in a follow-up
 post-tag commit that makes `main` look newer than the release for documentation
 only.
 
-The first public release, `v0.1.0`, was published from source commit
-`03cdd76e11c02799b379efd6cdd447216894a493` with image index digest
-`sha256:4847296e24f38c25e690da922264ec1f90e9f9ebf99d93a8c9775f7681134e1f`
-and chart SHA256
-`335053bd73b03a66d136c5bfa8081e5c3356b3b06a6af8e1721ee602c192b17a`.
+The current public release notes are the source of truth for published artifact
+digests and checksums.
 
 Nice to have before `v1.0.0`:
 
