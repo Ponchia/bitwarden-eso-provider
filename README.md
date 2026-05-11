@@ -317,19 +317,44 @@ are in [docs/operations/observability.md](docs/operations/observability.md).
 
 ## Comparison
 
-<!-- markdownlint-disable MD013 -->
+Bitwarden ESO Provider is deliberately narrow: it syncs Bitwarden Password
+Manager and Vaultwarden vault items through ESO. That makes it useful when the
+vault item is already the source of truth, but it is not a replacement for a
+dedicated infrastructure secret manager.
 
-| Option | Source | Kubernetes integration | Vaultwarden / Password Manager vault items | Notes |
-| --- | --- | --- | --- | --- |
-| Bitwarden ESO Provider | Bitwarden Password Manager and Vaultwarden vault items | ESO generic webhook | Yes | Best fit when vault items are already the source of truth and you want ESO-managed Kubernetes Secrets. |
-| [Bitwarden Secrets Manager Kubernetes Operator](https://bitwarden.com/help/secrets-manager-kubernetes-operator/) | Bitwarden Secrets Manager | First-party `BitwardenSecret` CRD and controller | No | Official Bitwarden path for Secrets Manager organizations and machine-account tokens. |
-| [ESO Bitwarden Secrets Manager provider](https://external-secrets.io/latest/provider/bitwarden-secrets-manager/) | Bitwarden Secrets Manager | Native ESO provider plus Bitwarden SDK server | No | ESO-native path for `bws`; requires the SDK server and HTTPS/certificate setup. |
-| [1Password Kubernetes Operator](https://developer.1password.com/docs/k8s/operator/) | 1Password items | First-party operator | No | Mature operator with documented automatic redeploy annotations. |
-| ESO providers for Vault, cloud secret managers, Infisical, and similar systems | Infrastructure secret stores | Native ESO providers | No | Best fit for dedicated infrastructure secret-management platforms. |
-| [Secrets Store CSI Driver](https://secrets-store-csi-driver.sigs.k8s.io/getting-started/usage) | External stores with CSI providers | `SecretProviderClass` and CSI volume mounts | Not for this vault-item flow | Best when workloads should consume mounted files rather than ESO-managed Secret manifests. |
-| `bw` CLI scripts or custom cron jobs | Bitwarden Password Manager or Vaultwarden | Script-specific | Sometimes | Useful for personal automation, but weaker as a public, tested, observable Kubernetes integration. |
+Use **Bitwarden ESO Provider** when you need:
 
-<!-- markdownlint-enable MD013 -->
+- Bitwarden Password Manager or Vaultwarden vault-item support.
+- ESO-managed `SecretStore`, `ExternalSecret`, refresh intervals, target
+  policies, and templating.
+- A webhook service with no Kubernetes API permissions.
+
+Use **Bitwarden Secrets Manager integrations** when your source of truth is
+Bitwarden Secrets Manager (`bws`), not Password Manager vault items:
+
+- [Bitwarden Secrets Manager Kubernetes Operator](https://bitwarden.com/help/secrets-manager-kubernetes-operator/)
+  is the first-party operator with its own `BitwardenSecret` CRD.
+- [ESO Bitwarden Secrets Manager provider](https://external-secrets.io/latest/provider/bitwarden-secrets-manager/)
+  is the ESO-native path for `bws`, with the Bitwarden SDK server and its
+  certificate setup.
+
+Use **[1Password Kubernetes Operator](https://developer.1password.com/docs/k8s/operator/)**
+when your organization already stores secrets in 1Password and wants the
+first-party Kubernetes integration, including documented automatic redeploy
+annotations.
+
+Use **ESO providers for Vault, cloud secret managers, Infisical, and similar
+systems** when you want a dedicated infrastructure secret-management platform,
+dynamic secrets, native identity integration, leases, audit workflows, or
+provider-specific rotation behavior.
+
+Use **[Secrets Store CSI Driver](https://secrets-store-csi-driver.sigs.k8s.io/getting-started/usage)**
+when workloads should consume mounted files from external stores instead of
+ESO-managed Kubernetes Secret manifests.
+
+Use **`bw` CLI scripts or custom cron jobs** only for small personal
+automations. They can work, but they are weaker as a public, tested,
+observable Kubernetes integration.
 
 ## Repository Layout
 
