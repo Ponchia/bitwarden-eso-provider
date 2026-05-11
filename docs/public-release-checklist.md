@@ -1,14 +1,18 @@
 # Public Release Checklist
 
+A tagged release is maintainer-initiated. Do not create a release tag, run the
+release publishing workflow, or update docs to call an unreleased state the
+current release unless a maintainer explicitly asks for a release.
+
 Not every merged change needs a tagged release. Use normal pull requests for
 documentation cleanup, repository hygiene, CI-only maintenance, governance
 wording, and non-shipping examples unless users need a new installable chart or
 image to consume the change.
 
-Create a release when a change affects runtime behavior, the container image,
-the Helm chart, install instructions for the current chart, dependency/security
-fixes users should consume, or any public compatibility/security claim that
-needs to be tied to an exact artifact.
+When a maintainer asks for a release, release-worthy changes typically include
+runtime behavior, the container image, the Helm chart, install instructions for
+the current chart, dependency/security fixes users should consume, or a public
+compatibility/security claim that needs to be tied to an exact artifact.
 
 Required before calling a release generally usable:
 

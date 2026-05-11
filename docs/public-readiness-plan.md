@@ -77,6 +77,10 @@ The public `v0.1.3` baseline has been validated with:
 
 ## Future Release Gate
 
+Releases are maintainer-initiated. Do not tag or publish a release simply
+because work has landed on `main`; wait until the maintainer says the current
+state is ready to release.
+
 Not every repository change needs a release. Documentation cleanup,
 governance-only edits, CI-only maintenance, and source-tree hygiene can land on
 `main` without a new tag when the latest published chart and image remain the

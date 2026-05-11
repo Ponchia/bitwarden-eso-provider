@@ -12,6 +12,10 @@ to this repository.
   license review explicitly approves reuse.
 - Do not put real Bitwarden/Vaultwarden credentials, master passwords, API
   tokens, or Kubernetes kubeconfigs in this repository.
+- Do not create release tags or run release publishing unless the maintainer
+  explicitly asks for a release. Normal cleanup and implementation work should
+  land on `main` first; release only after the maintainer decides the current
+  state is ready.
 
 ## Checks
 
