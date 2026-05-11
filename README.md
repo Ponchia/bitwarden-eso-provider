@@ -46,8 +46,10 @@ Verified so far:
 - ESO sync through `remoteRef` and `dataFrom.extract`.
 - Target Secret recreation, webhook restart, expected not-found failures,
   selector-policy denial, health probes, and redacted metrics.
-- Exact `v0.1.2` release chart and image smoke tests against Vaultwarden and
-  Bitwarden Cloud.
+- Exact `v0.1.2` OCI release chart and image smoke test against Vaultwarden.
+- Bitwarden Cloud US split endpoint live smoke was verified for `v0.1.1`; the
+  `v0.1.2` release changes packaging/version metadata, not the provider
+  protocol implementation.
 - Prometheus Operator `ServiceMonitor` / `PrometheusRule` compatibility, both
   through Helm rendering and server-side Kubernetes validation.
 

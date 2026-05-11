@@ -12,7 +12,9 @@ Required before calling a release generally usable:
 - Tag and publish a multi-arch image from GitHub Actions.
 - Run `scripts/live-eso-smoke.sh` against real Vaultwarden and Bitwarden Cloud
   accounts with k3s or a kind cluster with ESO installed, with selector policy
-  enabled.
+  enabled. For packaging-only releases, verify the changed packaging path and
+  record whether prior backend live evidence is being reused because provider
+  runtime behavior did not change.
 - Verify migration examples use `creationPolicy: Orphan`,
   `deletionPolicy: Retain`, and template `mergePolicy: Merge`, and that a
   deleted target Secret is recreated with identical data.

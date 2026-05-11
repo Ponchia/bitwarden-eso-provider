@@ -68,7 +68,8 @@ The public `v0.1.2` baseline has been validated with:
 - `scripts/live-eso-smoke.sh` against Vaultwarden on a k3s cluster with
   selector policy enabled.
 - `scripts/live-eso-smoke.sh` against Bitwarden Cloud with selector policy
-  enabled.
+  enabled for the `v0.1.1` runtime path; packaging-only releases may reuse that
+  evidence when provider protocol code is unchanged.
 - A tagged GitHub Release that publishes a multi-arch image, a GHCR OCI Helm
   chart, and a packaged Helm chart archive from the release commit.
 - Public repository controls for branch protection, tag protection, secret
@@ -83,7 +84,9 @@ For each release:
 - Confirm the release OCI chart and attached chart artifact are published only
   after the image manifest and release image scan succeed.
 - Run live smoke tests against Vaultwarden and Bitwarden Cloud with selector
-  policy enabled.
+  policy enabled when provider runtime behavior changes. Packaging-only releases
+  may reuse prior backend live evidence if fake-server coverage and the changed
+  packaging path are both verified.
 - Record the image index digest and chart checksum in the GitHub Release notes.
   Generated artifact hashes should not require a follow-up commit after tagging.
 
