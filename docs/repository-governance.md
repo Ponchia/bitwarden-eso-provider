@@ -68,18 +68,22 @@ for those tags.
 ## Allowed Workflow Actions
 
 Keep the repository Actions policy restricted to GitHub-owned actions plus these
-third-party actions used by CI and release workflows:
+third-party action patterns used by CI and release workflows:
 
-- `aquasecurity/trivy-action`
-- `azure/setup-helm`
-- `docker/build-push-action`
-- `docker/login-action`
-- `docker/metadata-action`
-- `docker/setup-buildx-action`
-- `dtolnay/rust-toolchain`
-- `softprops/action-gh-release`
-- `Swatinem/rust-cache`
-- `taiki-e/install-action`
+- `aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514`
+- `aquasecurity/trivy-action@v0.36.0`
+- `azure/setup-helm@v5`
+- `docker/build-push-action@v7`
+- `docker/login-action@v4`
+- `docker/metadata-action@v6`
+- `docker/setup-buildx-action@v4`
+- `dtolnay/rust-toolchain@stable`
+- `softprops/action-gh-release@v3`
+- `Swatinem/rust-cache@v2`
+- `taiki-e/install-action@v2`
+
+`aquasecurity/setup-trivy` is not referenced directly by repository workflows;
+it is the transitive setup action invoked by the pinned Trivy action.
 
 ## Dependabot Policy
 
