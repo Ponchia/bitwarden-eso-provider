@@ -43,121 +43,24 @@ pub struct BitwardenApiClient {
 }
 
 impl BitwardenApiClient {
-    /// Build an API client for a single-origin Vaultwarden or self-hosted
-    /// Bitwarden server with the default HTTP client and device identity.
+    /// Build an API client from a fully-populated options struct.
+    ///
+    /// Use [`BitwardenApiClientOptions::single_origin`] for Vaultwarden /
+    /// self-hosted Bitwarden, or [`BitwardenApiClientOptions::split`] for
+    /// Bitwarden Cloud and other split identity/API deployments.
     ///
     /// # Errors
     ///
     /// Returns an error if the HTTP client cannot be constructed.
-    pub fn new(
-        endpoint: BitwardenEndpoint,
-        auth: BitwardenAuth,
-    ) -> Result<Self, BitwardenApiError> {
-        Self::with_device(endpoint, auth, BitwardenDevice::default())
-    }
-
-    /// Build an API client for a single-origin Vaultwarden or self-hosted
-    /// Bitwarden server with an explicit device identity.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the HTTP client cannot be constructed.
-    pub fn with_device(
-        endpoint: BitwardenEndpoint,
-        auth: BitwardenAuth,
-        device: BitwardenDevice,
-    ) -> Result<Self, BitwardenApiError> {
-        Self::with_device_and_cache(endpoint, auth, device, BitwardenCacheConfig::default())
-    }
-
-    /// Build an API client for a single-origin Vaultwarden or self-hosted
-    /// Bitwarden server with explicit device identity and cache settings.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the HTTP client cannot be constructed.
-    pub fn with_device_and_cache(
-        endpoint: BitwardenEndpoint,
-        auth: BitwardenAuth,
-        device: BitwardenDevice,
-        cache_config: BitwardenCacheConfig,
-    ) -> Result<Self, BitwardenApiError> {
-        Self::with_endpoints_device_and_cache(
-            BitwardenEndpoints::from_single_origin(endpoint),
-            auth,
-            device,
-            cache_config,
-        )
-    }
-
-    /// Build an API client from explicit identity and API endpoint bases.
-    ///
-    /// This mode is required for Bitwarden Cloud, where identity and API
-    /// endpoints live on separate hosts.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the HTTP client cannot be constructed.
-    pub fn with_endpoints(
-        endpoints: BitwardenEndpoints,
-        auth: BitwardenAuth,
-    ) -> Result<Self, BitwardenApiError> {
-        Self::with_endpoints_and_device(endpoints, auth, BitwardenDevice::default())
-    }
-
-    /// Build an API client from explicit identity and API endpoint bases with
-    /// an explicit device identity.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the HTTP client cannot be constructed.
-    pub fn with_endpoints_and_device(
-        endpoints: BitwardenEndpoints,
-        auth: BitwardenAuth,
-        device: BitwardenDevice,
-    ) -> Result<Self, BitwardenApiError> {
-        Self::with_endpoints_device_and_cache(
-            endpoints,
-            auth,
-            device,
-            BitwardenCacheConfig::default(),
-        )
-    }
-
-    /// Build an API client from explicit identity and API endpoint bases with
-    /// explicit device identity and cache settings.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the HTTP client cannot be constructed.
-    pub fn with_endpoints_device_and_cache(
-        endpoints: BitwardenEndpoints,
-        auth: BitwardenAuth,
-        device: BitwardenDevice,
-        cache_config: BitwardenCacheConfig,
-    ) -> Result<Self, BitwardenApiError> {
-        Self::with_endpoints_device_cache_and_http_config(
+    pub fn with_options(options: BitwardenApiClientOptions) -> Result<Self, BitwardenApiError> {
+        let BitwardenApiClientOptions {
             endpoints,
             auth,
             device,
             cache_config,
-            BitwardenHttpConfig::default(),
-        )
-    }
+            http_config,
+        } = options;
 
-    /// Build an API client from explicit endpoints, device identity, cache
-    /// settings, and HTTP timeout settings.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the HTTP client cannot be constructed.
-    pub fn with_endpoints_device_cache_and_http_config(
-        endpoints: BitwardenEndpoints,
-        auth: BitwardenAuth,
-        device: BitwardenDevice,
-        cache_config: BitwardenCacheConfig,
-        http_config: BitwardenHttpConfig,
-    ) -> Result<Self, BitwardenApiError> {
         let http = HttpClient::builder()
             .user_agent("bitwarden-eso-provider")
             .connect_timeout(http_config.connect_timeout)
@@ -458,6 +361,71 @@ impl<'a> CipherLookup<'a> {
             return Ok(Self::Name(name));
         }
         Err(BitwardenClientError::UnprefixedSelectorKey)
+    }
+}
+
+/// Construction options for [`BitwardenApiClient`].
+///
+/// Build the struct directly or via the [`BitwardenApiClientOptions::single_origin`]
+/// and [`BitwardenApiClientOptions::split`] helpers, then hand it to
+/// [`BitwardenApiClient::with_options`].
+pub struct BitwardenApiClientOptions {
+    /// Identity and API endpoint bases.
+    pub endpoints: BitwardenEndpoints,
+    /// User API-key credentials and master password.
+    pub auth: BitwardenAuth,
+    /// Stable device identity sent during API-key login.
+    pub device: BitwardenDevice,
+    /// Vault sync cache settings.
+    pub cache_config: BitwardenCacheConfig,
+    /// HTTP transport timeouts.
+    pub http_config: BitwardenHttpConfig,
+}
+
+impl BitwardenApiClientOptions {
+    /// Options for a single-origin Vaultwarden or self-hosted Bitwarden server.
+    #[must_use]
+    pub fn single_origin(endpoint: BitwardenEndpoint, auth: BitwardenAuth) -> Self {
+        Self {
+            endpoints: BitwardenEndpoints::from_single_origin(endpoint),
+            auth,
+            device: BitwardenDevice::default(),
+            cache_config: BitwardenCacheConfig::default(),
+            http_config: BitwardenHttpConfig::default(),
+        }
+    }
+
+    /// Options for split identity / API endpoints (Bitwarden Cloud).
+    #[must_use]
+    pub fn split(endpoints: BitwardenEndpoints, auth: BitwardenAuth) -> Self {
+        Self {
+            endpoints,
+            auth,
+            device: BitwardenDevice::default(),
+            cache_config: BitwardenCacheConfig::default(),
+            http_config: BitwardenHttpConfig::default(),
+        }
+    }
+
+    /// Override the device identity.
+    #[must_use]
+    pub fn with_device(mut self, device: BitwardenDevice) -> Self {
+        self.device = device;
+        self
+    }
+
+    /// Override the sync cache config.
+    #[must_use]
+    pub fn with_cache_config(mut self, cache_config: BitwardenCacheConfig) -> Self {
+        self.cache_config = cache_config;
+        self
+    }
+
+    /// Override the HTTP transport config.
+    #[must_use]
+    pub fn with_http_config(mut self, http_config: BitwardenHttpConfig) -> Self {
+        self.http_config = http_config;
+        self
     }
 }
 
@@ -1460,11 +1428,9 @@ mod tests {
             master_password: PASSWORD.into(),
         };
 
-        let client = BitwardenApiClient::with_device_and_cache(
-            endpoint,
-            auth,
-            BitwardenDevice::default(),
-            cache_config,
+        let client = BitwardenApiClient::with_options(
+            BitwardenApiClientOptions::single_origin(endpoint, auth)
+                .with_cache_config(cache_config),
         )?;
 
         Ok((client, counters))
@@ -1481,11 +1447,8 @@ mod tests {
             master_password: PASSWORD.into(),
         };
 
-        let client = BitwardenApiClient::with_endpoints_device_and_cache(
-            endpoints,
-            auth,
-            BitwardenDevice::default(),
-            cache_config,
+        let client = BitwardenApiClient::with_options(
+            BitwardenApiClientOptions::split(endpoints, auth).with_cache_config(cache_config),
         )?;
 
         Ok((client, counters))

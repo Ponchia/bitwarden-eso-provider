@@ -19,9 +19,9 @@ use axum::{
     Json, Router,
 };
 use bweso_bitwarden::{
-    BitwardenApiClient, BitwardenApiError, BitwardenAuth, BitwardenCacheConfig,
-    BitwardenClientError, BitwardenDevice, BitwardenEndpoint, BitwardenEndpoints,
-    BitwardenHttpConfig, BitwardenProvider, BitwardenSelector, CipherError,
+    BitwardenApiClient, BitwardenApiClientOptions, BitwardenApiError, BitwardenAuth,
+    BitwardenCacheConfig, BitwardenClientError, BitwardenDevice, BitwardenEndpoint,
+    BitwardenEndpoints, BitwardenHttpConfig, BitwardenProvider, BitwardenSelector, CipherError,
 };
 use bweso_core::{require_non_empty, RemoteRef, SecretDocument};
 use clap::Parser;
@@ -315,13 +315,13 @@ fn provider_from_args(args: &Args) -> anyhow::Result<Arc<dyn BitwardenProvider>>
         Duration::from_secs(args.http_connect_timeout_seconds),
         Duration::from_secs(args.http_request_timeout_seconds),
     );
-    let provider = BitwardenApiClient::with_endpoints_device_cache_and_http_config(
+    let provider = BitwardenApiClient::with_options(BitwardenApiClientOptions {
         endpoints,
         auth,
         device,
         cache_config,
         http_config,
-    )
+    })
     .context("failed to build Bitwarden-compatible API client")?;
 
     Ok(Arc::new(provider))
