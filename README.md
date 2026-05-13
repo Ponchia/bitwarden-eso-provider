@@ -280,10 +280,11 @@ Docker config JSON, basic auth, SSH auth, multiline files, Reloader, warned
 
 ## Selectors And Properties
 
-Use `id:<item-id>` selectors in production. Item IDs are stable across renames.
-`name:<item-name>` is supported for convenience, but duplicate item names are
-rejected as ambiguous. Bare selectors currently try item ID first and then item
-name for pre-release compatibility.
+Selectors must use an explicit `id:<item-id>` or `name:<item-name>` prefix.
+Unprefixed keys are rejected with `400 validation` since `v0.2`. Use `id:`
+selectors in production — item IDs are stable across renames. `name:` is
+supported for convenience, but duplicate item names are rejected as
+ambiguous.
 
 Common properties:
 

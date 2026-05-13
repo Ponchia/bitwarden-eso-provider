@@ -359,18 +359,9 @@ impl BitwardenApiClient {
         user_key: &AuthenticatedSymmetricKey,
         key: &str,
     ) -> Result<DecryptedCipher, BitwardenClientError> {
-        match CipherLookup::from_key(key) {
+        match CipherLookup::from_key(key)? {
             CipherLookup::Id(id) => Self::resolve_synced_cipher_by_id(sync, user_key, id),
             CipherLookup::Name(name) => Self::resolve_synced_cipher_by_name(sync, user_key, name),
-            CipherLookup::IdThenName => {
-                match Self::resolve_synced_cipher_by_id(sync, user_key, key) {
-                    Ok(cipher) => Ok(cipher),
-                    Err(BitwardenClientError::Api(BitwardenApiError::CipherNotFound)) => {
-                        Self::resolve_synced_cipher_by_name(sync, user_key, key)
-                    }
-                    Err(error) => Err(error),
-                }
-            }
         }
     }
 
@@ -456,18 +447,17 @@ impl BitwardenProvider for BitwardenApiClient {
 enum CipherLookup<'a> {
     Id(&'a str),
     Name(&'a str),
-    IdThenName,
 }
 
 impl<'a> CipherLookup<'a> {
-    fn from_key(key: &'a str) -> Self {
+    fn from_key(key: &'a str) -> Result<Self, BitwardenClientError> {
         if let Some(id) = key.strip_prefix("id:") {
-            return Self::Id(id);
+            return Ok(Self::Id(id));
         }
         if let Some(name) = key.strip_prefix("name:") {
-            return Self::Name(name);
+            return Ok(Self::Name(name));
         }
-        Self::IdThenName
+        Err(BitwardenClientError::UnprefixedSelectorKey)
     }
 }
 
@@ -1058,7 +1048,7 @@ mod tests {
         let (client, counters) =
             fake_split_client_with_cache(BitwardenCacheConfig::default()).await?;
         let selector = BitwardenSelector::try_from(RemoteRef {
-            key: "app/database".to_string(),
+            key: "name:app/database".to_string(),
             property: Some("DATABASE_URL".to_string()),
             version: None,
         })?;
@@ -1132,7 +1122,7 @@ mod tests {
     async fn resolves_cipher_property_through_api_key_login_and_sync() -> TestResult {
         let client = fake_client().await?;
         let selector = BitwardenSelector::try_from(RemoteRef {
-            key: "app/database".to_string(),
+            key: "name:app/database".to_string(),
             property: Some("DATABASE_URL".to_string()),
             version: None,
         })?;
@@ -1154,7 +1144,7 @@ mod tests {
     async fn resolves_whole_cipher_to_secret_document() -> TestResult {
         let client = fake_client().await?;
         let selector = BitwardenSelector::try_from(RemoteRef {
-            key: "cipher-login".to_string(),
+            key: "id:cipher-login".to_string(),
             property: None,
             version: None,
         })?;
@@ -1203,7 +1193,7 @@ mod tests {
         };
 
         let Err(error) =
-            BitwardenApiClient::resolve_synced_cipher(&sync, &user_key, "app/database")
+            BitwardenApiClient::resolve_synced_cipher(&sync, &user_key, "name:app/database")
         else {
             unreachable!("duplicate item names should be ambiguous");
         };
@@ -1323,7 +1313,7 @@ mod tests {
         let (client, counters) =
             fake_client_with_cache(BitwardenCacheConfig::new(Duration::from_secs(60))).await?;
         let selector = BitwardenSelector::try_from(RemoteRef {
-            key: "app/database".to_string(),
+            key: "name:app/database".to_string(),
             property: Some("DATABASE_URL".to_string()),
             version: None,
         })?;
@@ -1341,7 +1331,7 @@ mod tests {
         let (client, counters) =
             fake_client_with_cache(BitwardenCacheConfig::new(Duration::from_secs(60))).await?;
         let selector = BitwardenSelector::try_from(RemoteRef {
-            key: "app/database".to_string(),
+            key: "name:app/database".to_string(),
             property: Some("DATABASE_URL".to_string()),
             version: None,
         })?;
@@ -1386,7 +1376,7 @@ mod tests {
     async fn disabled_cache_refreshes_every_resolve() -> TestResult {
         let (client, counters) = fake_client_with_cache(BitwardenCacheConfig::disabled()).await?;
         let selector = BitwardenSelector::try_from(RemoteRef {
-            key: "app/database".to_string(),
+            key: "name:app/database".to_string(),
             property: Some("DATABASE_URL".to_string()),
             version: None,
         })?;
@@ -1404,7 +1394,7 @@ mod tests {
         let (client, counters) =
             fake_client_with_cache(BitwardenCacheConfig::new(Duration::from_millis(10))).await?;
         let selector = BitwardenSelector::try_from(RemoteRef {
-            key: "app/database".to_string(),
+            key: "name:app/database".to_string(),
             property: Some("DATABASE_URL".to_string()),
             version: None,
         })?;
@@ -1423,7 +1413,7 @@ mod tests {
         let (client, counters) =
             fake_client_with_cache(BitwardenCacheConfig::new(Duration::from_secs(60))).await?;
         let selector = BitwardenSelector::try_from(RemoteRef {
-            key: "app/database".to_string(),
+            key: "name:app/database".to_string(),
             property: Some("DATABASE_URL".to_string()),
             version: None,
         })?;

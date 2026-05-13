@@ -94,8 +94,8 @@ Implemented:
 - Individual vault item sync against single-origin and split endpoint layouts.
 - Single-field ESO sync through `remoteRef` and whole-item ESO sync through
   `dataFrom.extract`.
-- `id:<item-id>` and `name:<item-name>` selectors. Bare selectors currently try
-  ID first and then decrypted item name for pre-release compatibility.
+- `id:<item-id>` and `name:<item-name>` selectors. Explicit prefix required;
+  unprefixed bare keys are rejected with `400 validation`.
 - Provider-side selector policy based on exact raw keys and raw key prefixes.
   This policy gates item keys, not individual item properties.
 

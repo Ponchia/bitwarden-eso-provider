@@ -678,6 +678,7 @@ fn provider_status_and_kind(error: &BitwardenClientError) -> (StatusCode, &'stat
         BitwardenClientError::UnsupportedVersionSelector => {
             (StatusCode::BAD_REQUEST, "unsupported_version")
         }
+        BitwardenClientError::UnprefixedSelectorKey => (StatusCode::BAD_REQUEST, "validation"),
     }
 }
 
@@ -1154,7 +1155,7 @@ mod tests {
                     .uri("/v1/resolve")
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
-                        r#"{"remoteRef":{"key":"app/database","property":"DATABASE_URL"}}"#,
+                        r#"{"remoteRef":{"key":"name:app/database","property":"DATABASE_URL"}}"#,
                     ))?,
             )
             .await?;
@@ -1186,7 +1187,7 @@ mod tests {
                     .uri("/v1/resolve")
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
-                        r#"{"remoteRef":{"key":"app/database","property":"DATABASE_URL"}}"#,
+                        r#"{"remoteRef":{"key":"name:app/database","property":"DATABASE_URL"}}"#,
                     ))?,
             )
             .await?;
@@ -1201,7 +1202,7 @@ mod tests {
                     .header(header::CONTENT_TYPE, "application/json")
                     .header(header::AUTHORIZATION, "Bearer wrong-token")
                     .body(Body::from(
-                        r#"{"remoteRef":{"key":"app/database","property":"DATABASE_URL"}}"#,
+                        r#"{"remoteRef":{"key":"name:app/database","property":"DATABASE_URL"}}"#,
                     ))?,
             )
             .await?;
@@ -1215,7 +1216,7 @@ mod tests {
                     .header(header::CONTENT_TYPE, "application/json")
                     .header(header::AUTHORIZATION, "Bearer expected-webhook-token")
                     .body(Body::from(
-                        r#"{"remoteRef":{"key":"app/database","property":"DATABASE_URL"}}"#,
+                        r#"{"remoteRef":{"key":"name:app/database","property":"DATABASE_URL"}}"#,
                     ))?,
             )
             .await?;
@@ -1276,7 +1277,7 @@ mod tests {
                     .method(Method::POST)
                     .uri("/v1/resolve")
                     .body(Body::from(
-                        r#"{"remoteRef":{"key":"app/database","property":"DATABASE_URL"}}"#,
+                        r#"{"remoteRef":{"key":"name:app/database","property":"DATABASE_URL"}}"#,
                     ))?,
             )
             .await?;
@@ -1338,7 +1339,7 @@ mod tests {
                     .uri("/v1/resolve")
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
-                        r#"{"remoteRef":{"key":"app/database","property":"DATABASE_URL"}}"#,
+                        r#"{"remoteRef":{"key":"name:app/database","property":"DATABASE_URL"}}"#,
                     ))?,
             )
             .await?;
@@ -1402,7 +1403,7 @@ mod tests {
                     .uri("/v1/resolve")
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
-                        r#"{"remoteRef":{"key":"app/database","property":"DATABASE_URL","version":"42"}}"#,
+                        r#"{"remoteRef":{"key":"name:app/database","property":"DATABASE_URL","version":"42"}}"#,
                     ))?,
             )
             .await?;
@@ -1469,7 +1470,7 @@ mod tests {
                     .uri("/v1/resolve")
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
-                        r#"{"remoteRef":{"key":"app/database","property":"DATABASE_URL"}}"#,
+                        r#"{"remoteRef":{"key":"name:app/database","property":"DATABASE_URL"}}"#,
                     ))?,
             )
             .await?;

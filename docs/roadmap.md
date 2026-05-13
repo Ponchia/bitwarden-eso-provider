@@ -46,9 +46,6 @@ deleted, old tags are yanked, no compatibility shim is kept. Targeted scope:
   the self-hosted homelab target.
 - Add per-source **rate limiting / concurrency cap** on `/v1/resolve` beyond
   the current bearer-token + body-size + single-flight-refresh mitigations.
-- Drop the bare-selector "id then name" fallback. Require explicit `id:` or
-  `name:` prefixes. The fallback's name-lookup path linear-scans and decrypts
-  every cipher in the vault on a miss, which is a foot-gun.
 - Collapse the six `BitwardenApiClient` constructors into a single
   `with_options(BitwardenApiClientOptions)` form.
 - Replace the hand-rolled `constant_time_eq` with the `subtle` crate (or the
