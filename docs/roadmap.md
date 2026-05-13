@@ -55,10 +55,13 @@ deleted, old tags are yanked, no compatibility shim is kept. Targeted scope:
 - Replace the hand-rolled `constant_time_eq` with the `subtle` crate (or the
   `constant_time_eq` crate) so the project does not ship its own
   constant-time comparison.
-- Replace the hand-rolled Prometheus text-format emitter with
-  `metrics-exporter-prometheus`. Existing redaction tests cover regression.
-- Add cargo-fuzz coverage on `EncryptedString::from_str` — the parser eating
-  untrusted upstream bytes.
+- Replace the hand-rolled Prometheus emitter with `metrics-exporter-prometheus`:
+  **no** (see [`decisions/0003-keep-handrolled-prometheus-emitter.md`](decisions/0003-keep-handrolled-prometheus-emitter.md)).
+- Added cargo-fuzz target on `EncryptedString::from_str` at
+  `crates/bweso-bitwarden/fuzz/`. The target asserts that no input panics;
+  malformed bytes must surface as typed errors. Run weekly + on-demand via
+  `.github/workflows/fuzz.yml`. Seeded corpus covers valid type-2 strings,
+  legacy type-0 (rejected), and empty input.
 - Adopt the Bitwarden Password Manager SDK Rust crates: **no** (see
   [`decisions/0001-bitwarden-sdk-adoption.md`](decisions/0001-bitwarden-sdk-adoption.md)).
 
@@ -66,8 +69,16 @@ deleted, old tags are yanked, no compatibility shim is kept. Targeted scope:
 
 Higher-effort follow-up work:
 
-- Add disposable kind integration coverage that does not require private
-  credentials.
+- Finish the Vaultwarden-in-kind integration test. Scaffolding is in
+  `.github/workflows/kind-integration.yml` (workflow_dispatch only) and
+  `scripts/kind-vaultwarden-bootstrap.sh`. The blocker is the
+  user-registration crypto step: Vaultwarden's `/api/accounts/register`
+  expects a real Bitwarden registration payload (PBKDF2 master key,
+  stretched user key, RSA keypair) that is impractical to assemble in
+  shell. The recommended fix is a tiny `vaultwarden-test-bootstrap`
+  binary inside the workspace that uses the `bweso-bitwarden` crypto
+  primitives to register the user and plant an item, then the workflow
+  shells out to it.
 - Add **organization / shared item decryption** after fixture coverage,
   key-handling review, and live verification against both Vaultwarden and
   Bitwarden Cloud. This is the gap that excludes most team-scale users today.

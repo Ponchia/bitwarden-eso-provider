@@ -4,6 +4,7 @@ members = [
     "crates/bweso-bitwarden",
     "crates/vaultwarden-eso-provider",
 ]
+exclude = ["crates/bweso-bitwarden/fuzz"]
 resolver = "2"
 
 [workspace.package]
