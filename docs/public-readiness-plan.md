@@ -6,8 +6,13 @@ rules for future releases.
 
 ## Product Shape
 
-The first public release remains an External Secrets Operator webhook provider
-for Bitwarden Password Manager and Vaultwarden vault items.
+The project is an External Secrets Operator webhook provider for
+**Vaultwarden** (and self-hosted Bitwarden Password Manager), with Bitwarden
+Cloud Password Manager as a secondary supported target. Bitwarden Secrets
+Manager is out of scope and is not implemented by Vaultwarden in any case.
+The repository will be renamed to `vaultwarden-eso-provider` at `v0.2` (see
+[roadmap.md](roadmap.md)); `v0.1.x` artifacts are being removed as part of
+that rename and are not preserved for compatibility.
 
 Do not build a native Kubernetes operator during the `v0.1.x` release line. ESO
 already owns refresh intervals, target `Secret` lifecycle, deletion behavior,

@@ -5,17 +5,17 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Unofficial [External Secrets Operator](https://external-secrets.io/) webhook
-provider for syncing **Bitwarden Password Manager** and **Vaultwarden** vault
-items into Kubernetes `Secret` resources.
+provider for **Vaultwarden** and self-hosted **Bitwarden Password Manager**
+vaults. Also compatible with **Bitwarden Cloud** Password Manager.
 
-This project is for the Password Manager vault-item API surface, not
-[Bitwarden Secrets Manager](https://bitwarden.com/products/secrets-manager/).
-It exists for teams and homelabs that already keep operational secrets in
-Bitwarden Password Manager or Vaultwarden and want to consume them through
-standard ESO-managed Kubernetes Secrets.
+The primary target is teams and homelabs running Vaultwarden who want
+ESO-managed Kubernetes Secrets and cannot use Bitwarden Secrets Manager
+(`bws`) — Secrets Manager is a separate paid product surface and Vaultwarden
+does not implement it. Bitwarden Cloud Password Manager users get the same
+ESO path for free, using their existing user API key.
 
 ```text
-Bitwarden Cloud or Vaultwarden
+Vaultwarden or Bitwarden Cloud Password Manager
         |
         | user API key + master-password unlock + local item decryption
         v
@@ -34,9 +34,12 @@ the External Secrets Operator project.
 
 ## Status
 
-`v0.1.3` is the current public release. The provider is functional and
-live-tested, but chart values, image tags, and crate APIs may still change
-before `v1.0.0`. Pin chart and image versions for every real deployment.
+`v0.1.3` is the current public release. The provider is functional and has
+been smoke-tested end-to-end against the released chart and image, but the
+`v0.1.x` line is still pre-`v1.0.0`: chart values, image tags, and crate
+APIs may change, there is no production soak time, and the project has a
+single maintainer. Pin chart and image versions for every real deployment
+and treat upgrades as deliberate.
 
 Verified so far:
 
@@ -46,9 +49,10 @@ Verified so far:
 - ESO sync through `remoteRef` and `dataFrom.extract`.
 - Target Secret recreation, webhook restart, expected not-found failures,
   selector-policy denial, health probes, and redacted metrics.
-- Exact `v0.1.3` OCI release chart and image smoke test against Vaultwarden.
-- Bitwarden Cloud US split endpoint live smoke was verified for `v0.1.1`;
-  `v0.1.3` does not change the provider protocol implementation.
+- Exact `v0.1.3` OCI release chart and image smoke test against Vaultwarden
+  on 2026-05-11. This is a smoke test, not extended production verification.
+- Bitwarden Cloud US split endpoint live smoke was verified for `v0.1.1` on
+  2026-05-11; `v0.1.3` does not change the provider protocol implementation.
 - Prometheus Operator `ServiceMonitor` / `PrometheusRule` compatibility, both
   through Helm rendering and server-side Kubernetes validation.
 
@@ -56,25 +60,35 @@ Verified so far:
 
 Use this project when:
 
-- Your source of truth is Bitwarden Password Manager or Vaultwarden vault
-  items.
+- You run **Vaultwarden** (or self-hosted Bitwarden Password Manager) and want
+  ESO-managed Kubernetes Secrets sourced from vault items. This is the
+  primary case the project is built for.
+- You run **Bitwarden Cloud Password Manager** and do not want to pay for
+  Bitwarden Secrets Manager just to feed Kubernetes Secrets.
 - You want ESO to own refresh intervals, target Secret policies, templating,
   status, and GitOps-friendly manifests.
-- You can dedicate a Bitwarden/Vaultwarden user or API key to each Kubernetes
-  trust boundary.
+- You can dedicate a Vaultwarden or Bitwarden user (and its API key) to each
+  Kubernetes trust boundary.
 - You want a small webhook service with no Kubernetes API permissions.
 
 Use something else when:
 
-- Your secrets already live in Bitwarden Secrets Manager. Use Bitwarden's
-  official operator or ESO's Bitwarden Secrets Manager provider.
+- Your source of truth is Bitwarden Cloud **Secrets Manager** (`bws`). Use
+  Bitwarden's [first-party Secrets Manager Kubernetes Operator](https://bitwarden.com/help/secrets-manager-kubernetes-operator/)
+  or [ESO's Bitwarden Secrets Manager provider](https://external-secrets.io/latest/provider/bitwarden-secrets-manager/).
+  Note: Secrets Manager is a separate paid product surface, and Vaultwarden
+  does not implement it — this is not an alternative for Vaultwarden users.
 - You need dynamic infrastructure secrets, leases, or database credentials.
   Use Vault, a cloud secret manager, Infisical, or another purpose-built
   backend.
-- You need shared organization item decryption or attachment extraction today.
-  Those are explicit non-features for the first release.
-- You cannot accept storing a Bitwarden/Vaultwarden user API key and master
+- You need shared **organization** vault-item decryption or attachment
+  extraction today. Both are explicit non-features in the `v0.1.x` line; for
+  many teams the organization-item gap is the deciding factor.
+- You cannot accept storing a Vaultwarden/Bitwarden user API key and master
   password in the provider runtime namespace.
+- Your Vaultwarden uses a private CA that you cannot replace with a
+  publicly-trusted certificate. Custom CA bundle support is on the roadmap
+  but not implemented in `v0.1.x`.
 
 ## Features
 
@@ -95,9 +109,19 @@ Use something else when:
 
 ## Current Limits
 
-- Bitwarden Secrets Manager (`bws`) APIs are not supported.
-- Shared organization items fail with `unsupported_shared_item` until
-  organization-key decryption is implemented and live-tested.
+- **Shared organization items are not supported.** Selected organization items
+  fail with `unsupported_shared_item` until organization-key decryption is
+  implemented and live-tested against both Vaultwarden and Bitwarden Cloud.
+  For many teams this is the deciding gap; the `v0.1.x` line is realistic
+  only for personal vaults or small per-user-key deployments.
+- **No custom CA bundle support.** TLS verification uses the system trust
+  store. Vaultwarden installs on a private CA must either expose the API
+  through a publicly-trusted certificate or wait for this to land.
+- **No rate limiting on `/v1/resolve`.** Bearer-token auth, the 16 KiB body
+  cap, and single-flight cache refresh are the only DoS mitigations; deploy
+  behind a NetworkPolicy and treat the webhook URL as a sensitive endpoint.
+- Bitwarden Secrets Manager (`bws`) APIs are not supported by design — that
+  product surface has first-party integrations.
 - Attachment properties fail with `unsupported_attachment`. For `v0.1.x`, store
   certificates, kubeconfigs, SSH keys, and multiline config in secure notes or
   custom fields.
@@ -287,7 +311,7 @@ The provider is intentionally narrow:
 - Kubernetes manifests decide target namespaces and Secret names. Vault item
   metadata never decides where data is written.
 - The provider needs no Kubernetes API RBAC.
-- The provider's Bitwarden/Vaultwarden client ID, client secret, and master
+- The provider's Vaultwarden/Bitwarden client ID, client secret, and master
   password stay in the provider namespace.
 - Workload namespaces need only the webhook bearer token used by ESO.
 - Logs, metrics, and public error responses redact secret values, item IDs,
@@ -295,16 +319,30 @@ The provider is intentionally narrow:
   keys.
 - `/v1/resolve` checks bearer-token authentication before parsing the request
   body, and resolve request bodies are capped at 16 KiB.
-- TLS verification is required for non-local Bitwarden/Vaultwarden endpoints.
-- The default Service is cluster-internal HTTP. Keep it private, require the
-  bearer token, use NetworkPolicy, and put it behind TLS or mTLS when the pod
-  network is not a trusted boundary.
+- TLS verification is required for non-local Vaultwarden/Bitwarden endpoints,
+  using the system trust store. Custom CA bundles are not yet configurable;
+  Vaultwarden installs on a private CA must front the API with a publicly-
+  trusted certificate.
 
-Selector policy is item-key scoped. If a namespace can request an allowed
-`remoteRef.key`, it can request any property on that item and can use whole-item
-extraction unless ESO manifests, RBAC, and review prevent it. For strict
-isolation, use dedicated provider credentials per namespace or trust boundary
-plus exact `id:` allowlists.
+### What the default deployment does *not* give you
+
+- **The default Service is plain cluster-internal HTTP.** Resolved secret
+  values travel over the pod network protected only by the bearer token and
+  whatever NetworkPolicy you apply. Put the provider behind TLS or mTLS (a
+  mesh, ingress, or gateway) whenever the pod network is not a trusted
+  boundary. The chart does not currently include a built-in TLS option.
+- **Selector policy is item-key scoped, not property-scoped.** If a namespace
+  can request an allowed `remoteRef.key`, it can request any property on that
+  item and can use whole-item extraction. For strict per-property isolation,
+  use dedicated provider credentials per trust boundary plus exact `id:`
+  allowlists, not selector policy alone.
+- **No rate limiting on `/v1/resolve`.** Authenticated callers can drive
+  resolve traffic at any rate; deploy with NetworkPolicy restricting ingress
+  to the ESO controller namespace.
+- **The master password sits in provider pod memory.** This is a fundamental
+  trade-off of using Password Manager vault items — it is not a property of
+  Bitwarden Secrets Manager, which Vaultwarden does not implement. See the
+  [threat model](docs/threat-model.md) for the realistic alternatives.
 
 Kubernetes Secrets are still Kubernetes Secrets. Enable encryption at rest,
 restrict RBAC, and avoid granting broad read access to generated Secrets.
@@ -359,20 +397,23 @@ are in [docs/operations/observability.md](docs/operations/observability.md).
 
 ## Comparison
 
-Bitwarden ESO Provider is deliberately narrow: it syncs Bitwarden Password
-Manager and Vaultwarden vault items through ESO. That makes it useful when the
-vault item is already the source of truth, but it is not a replacement for a
+This project is deliberately narrow: it syncs Vaultwarden and Bitwarden
+Password Manager vault items through ESO. That makes it useful when the vault
+item is already the source of truth, but it is not a replacement for a
 dedicated infrastructure secret manager.
 
-Use **Bitwarden ESO Provider** when you need:
+Use **this project** when you need:
 
-- Bitwarden Password Manager or Vaultwarden vault-item support.
+- Vaultwarden or Bitwarden Password Manager vault-item support, especially
+  for self-hosted setups where Bitwarden Secrets Manager is not an option.
 - ESO-managed `SecretStore`, `ExternalSecret`, refresh intervals, target
   policies, and templating.
 - A webhook service with no Kubernetes API permissions.
 
 Use **Bitwarden Secrets Manager integrations** when your source of truth is
-Bitwarden Secrets Manager (`bws`), not Password Manager vault items:
+Bitwarden Cloud Secrets Manager (`bws`), not Password Manager vault items.
+Secrets Manager is a paid product surface and is **not** implemented by
+Vaultwarden, so these are not alternatives for Vaultwarden users:
 
 - [Bitwarden Secrets Manager Kubernetes Operator](https://bitwarden.com/help/secrets-manager-kubernetes-operator/)
   is the first-party operator with its own `BitwardenSecret` CRD.
@@ -395,8 +436,9 @@ when workloads should consume mounted files from external stores instead of
 ESO-managed Kubernetes Secret manifests.
 
 Use **`bw` CLI scripts or custom cron jobs** only for small personal
-automations. They can work, but they are weaker as a public, tested,
-observable Kubernetes integration.
+automations. They can work, but they are weaker as a tested, observable,
+auditable Kubernetes integration — which is the gap this project tries to
+close for the Vaultwarden / self-hosted case.
 
 ## Repository Layout
 

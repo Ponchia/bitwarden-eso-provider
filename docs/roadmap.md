@@ -31,24 +31,60 @@ The first public release includes:
 - Live smoke verification against Vaultwarden and Bitwarden Cloud using the
   exact release chart and image.
 
-## After v0.1.x
+## v0.2 (Rename + Vaultwarden-First Repositioning)
 
-High-value follow-up work:
+`v0.2` is the rename and repositioning boundary. `v0.1.x` had no real users,
+so this is a hard rename: the old GHCR image package and OCI chart are
+deleted, old tags are yanked, no compatibility shim is kept. Targeted scope:
+
+- Rename the GitHub repository, binary crate, container image, and Helm chart
+  from `bitwarden-eso-provider` to `vaultwarden-eso-provider`. The crate
+  prefix `bweso-` (which refers to the Bitwarden-compatible API surface) can
+  stay; only the binary crate and the chart move.
+- Add **custom CA bundle support** (`BWESO_CA_BUNDLE_FILE` plus a Helm value)
+  for Vaultwarden installs on a private CA. This is the most common gap for
+  the self-hosted homelab target.
+- Add per-source **rate limiting / concurrency cap** on `/v1/resolve` beyond
+  the current bearer-token + body-size + single-flight-refresh mitigations.
+- Drop the bare-selector "id then name" fallback. Require explicit `id:` or
+  `name:` prefixes. The fallback's name-lookup path linear-scans and decrypts
+  every cipher in the vault on a miss, which is a foot-gun.
+- Collapse the six `BitwardenApiClient` constructors into a single
+  `with_options(BitwardenApiClientOptions)` form.
+- Replace the hand-rolled `constant_time_eq` with the `subtle` crate (or the
+  `constant_time_eq` crate) so the project does not ship its own
+  constant-time comparison.
+- Replace the hand-rolled Prometheus text-format emitter with
+  `metrics-exporter-prometheus`. Existing redaction tests cover regression.
+- Add cargo-fuzz coverage on `EncryptedString::from_str` — the parser eating
+  untrusted upstream bytes.
+- Adopt the Bitwarden Password Manager SDK Rust crates: **no** (see
+  [`decisions/0001-bitwarden-sdk-adoption.md`](decisions/0001-bitwarden-sdk-adoption.md)).
+
+## After v0.2
+
+Higher-effort follow-up work:
 
 - Add disposable kind integration coverage that does not require private
   credentials.
+- Add **organization / shared item decryption** after fixture coverage,
+  key-handling review, and live verification against both Vaultwarden and
+  Bitwarden Cloud. This is the gap that excludes most team-scale users today.
+- Add attachment metadata lookup, download, decryption, and Kubernetes
+  mapping only after the UX and security model are clear.
 - Assess whether a native ESO provider would remove webhook operational
   friction without duplicating ESO's lifecycle semantics.
-- Add organization/shared item decryption after fixture coverage, key-handling
-  review, and live verification.
-- Add attachment metadata lookup, download, decryption, and Kubernetes mapping
-  only after the UX and security model are clear.
 - Evaluate stale-cache-on-upstream-outage behavior. The first release keeps
   upstream failures explicit.
 - Decide whether a GitHub Pages chart repository is worth the extra release
   surface for users who cannot consume OCI charts.
 - Revisit a native Kubernetes controller only if ESO cannot cover important
   workflows cleanly.
+- Add fuzzing on the Bitwarden encrypted-string parser and property tests on
+  URL/path construction; the current CI gates verify hygiene, not protocol
+  parser robustness.
+- Consolidate the governance / readiness / release-checklist documents,
+  which currently overlap.
 
 ## Not Planned For v0.1.x
 

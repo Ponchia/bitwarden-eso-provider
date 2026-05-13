@@ -2,9 +2,12 @@
 
 ## Goal
 
-Provide a serious, public-ready path for syncing Bitwarden or Vaultwarden
-Password Manager items into Kubernetes without making vault item metadata the
-Kubernetes control plane.
+Provide a serious, public-ready path for syncing **Vaultwarden** and
+Bitwarden Password Manager items into Kubernetes without making vault item
+metadata the Kubernetes control plane. Vaultwarden is the primary target —
+it is free, self-hosted, and has no first-party Kubernetes secret integration
+of its own. Bitwarden Cloud Password Manager is supported as a secondary
+target for users who do not want to pay for Bitwarden Secrets Manager.
 
 ## Initial Shape
 

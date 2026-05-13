@@ -28,6 +28,7 @@ use clap::Parser;
 use http::{header, HeaderMap, Request, StatusCode};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
+use subtle::ConstantTimeEq;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use url::Url;
@@ -417,7 +418,11 @@ impl WebhookAuth {
                 scheme.eq_ignore_ascii_case("Bearer")
                     && !token.is_empty()
                     && token.trim() == token
-                    && constant_time_eq(expected.expose_secret().as_bytes(), token.as_bytes())
+                    && expected
+                        .expose_secret()
+                        .as_bytes()
+                        .ct_eq(token.as_bytes())
+                        .into()
             }
         }
     }
@@ -444,19 +449,6 @@ fn read_optional_sensitive_arg(
         }
         (None, None) => Ok(None),
     }
-}
-
-fn constant_time_eq(expected: &[u8], actual: &[u8]) -> bool {
-    let max_len = expected.len().max(actual.len());
-    let mut diff = expected.len() ^ actual.len();
-
-    for index in 0..max_len {
-        let expected_byte = expected.get(index).copied().unwrap_or(0);
-        let actual_byte = actual.get(index).copied().unwrap_or(0);
-        diff |= usize::from(expected_byte ^ actual_byte);
-    }
-
-    diff == 0
 }
 
 fn build_router(state: AppState) -> Router {
