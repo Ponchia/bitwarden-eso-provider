@@ -1665,6 +1665,7 @@ dependencies = [
  "bweso-core",
  "clap",
  "http",
+ "reqwest",
  "secrecy",
  "serde",
  "serde_json",

@@ -239,6 +239,23 @@
         }
       }
     },
+    "caBundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pem": {
+          "type": "string"
+        },
+        "existingSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "key": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
     "networkPolicy": {
       "type": "object",
       "additionalProperties": false,

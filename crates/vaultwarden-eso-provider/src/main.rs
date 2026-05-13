@@ -98,6 +98,10 @@ struct Args {
     http_connect_timeout_seconds: u64,
     #[arg(long, env = "BWESO_HTTP_REQUEST_TIMEOUT_SECONDS", default_value_t = 25)]
     http_request_timeout_seconds: u64,
+    /// PEM-encoded CA bundle to trust in addition to the system store. Use for
+    /// Vaultwarden installs on a private CA.
+    #[arg(long, env = "BWESO_CA_BUNDLE_FILE")]
+    ca_bundle_file: Option<PathBuf>,
     #[arg(long, env = "BWESO_WEBHOOK_AUTH_TOKEN")]
     webhook_auth_token: Option<String>,
     #[arg(long, env = "BWESO_WEBHOOK_AUTH_TOKEN_FILE")]
@@ -311,10 +315,12 @@ fn provider_from_args(args: &Args) -> anyhow::Result<Arc<dyn BitwardenProvider>>
         name: args.device_name.clone(),
     };
     let cache_config = BitwardenCacheConfig::new(Duration::from_secs(args.cache_ttl_seconds));
+    let extra_root_certificates = load_extra_root_certificates(args.ca_bundle_file.as_deref())?;
     let http_config = BitwardenHttpConfig::new(
         Duration::from_secs(args.http_connect_timeout_seconds),
         Duration::from_secs(args.http_request_timeout_seconds),
-    );
+    )
+    .with_extra_root_certificates(extra_root_certificates);
     let provider = BitwardenApiClient::with_options(BitwardenApiClientOptions {
         endpoints,
         auth,
@@ -449,6 +455,23 @@ fn read_optional_sensitive_arg(
         }
         (None, None) => Ok(None),
     }
+}
+
+fn load_extra_root_certificates(path: Option<&Path>) -> anyhow::Result<Vec<reqwest::Certificate>> {
+    let Some(path) = path else {
+        return Ok(Vec::new());
+    };
+
+    let display = path.display();
+    let pem = fs::read(path).with_context(|| format!("failed to read ca_bundle_file {display}"))?;
+    let certificates = reqwest::Certificate::from_pem_bundle(&pem)
+        .with_context(|| format!("failed to parse PEM certificates from {display}"))?;
+
+    if certificates.is_empty() {
+        anyhow::bail!("ca_bundle_file {display} contained no PEM certificates");
+    }
+
+    Ok(certificates)
 }
 
 fn build_router(state: AppState) -> Router {
@@ -829,6 +852,7 @@ mod tests {
             allowed_key_prefixes: Vec::new(),
             http_connect_timeout_seconds: 5,
             http_request_timeout_seconds: 25,
+            ca_bundle_file: None,
             webhook_auth_token: Some("test-webhook-token".to_string()),
             webhook_auth_token_file: None,
             insecure_allow_unauthenticated: false,

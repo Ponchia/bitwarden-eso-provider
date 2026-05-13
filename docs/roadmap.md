@@ -41,9 +41,10 @@ deleted, old tags are yanked, no compatibility shim is kept. Targeted scope:
   chart to `vaultwarden-eso-provider`. The crate prefix `bweso-` (which
   refers to the Bitwarden-compatible API surface) stays; only the binary
   crate, the chart, and the image moved.
-- Add **custom CA bundle support** (`BWESO_CA_BUNDLE_FILE` plus a Helm value)
-  for Vaultwarden installs on a private CA. This is the most common gap for
-  the self-hosted homelab target.
+- Added **custom CA bundle support**: `BWESO_CA_BUNDLE_FILE` env / CLI arg
+  plus `caBundle.pem` and `caBundle.existingSecret` Helm values. The bundle
+  supplements the system trust store and is the path for Vaultwarden
+  installs on a private CA.
 - Add per-source **rate limiting / concurrency cap** on `/v1/resolve` beyond
   the current bearer-token + body-size + single-flight-refresh mitigations.
 - Collapse the six `BitwardenApiClient` constructors into a single

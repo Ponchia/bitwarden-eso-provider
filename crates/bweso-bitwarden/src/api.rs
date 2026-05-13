@@ -61,12 +61,15 @@ impl BitwardenApiClient {
             http_config,
         } = options;
 
-        let http = HttpClient::builder()
-            .user_agent("bitwarden-eso-provider")
+        let mut builder = HttpClient::builder()
+            .user_agent("vaultwarden-eso-provider")
             .connect_timeout(http_config.connect_timeout)
             .timeout(http_config.request_timeout)
-            .redirect(reqwest::redirect::Policy::none())
-            .build()?;
+            .redirect(reqwest::redirect::Policy::none());
+        for certificate in http_config.extra_root_certificates {
+            builder = builder.add_root_certificate(certificate);
+        }
+        let http = builder.build()?;
 
         Ok(Self {
             endpoints,
@@ -461,21 +464,33 @@ impl Default for BitwardenCacheConfig {
     }
 }
 
-/// HTTP timeout settings for the Bitwarden-compatible API client.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+/// HTTP transport settings for the Bitwarden-compatible API client.
+#[derive(Debug, Clone)]
 pub struct BitwardenHttpConfig {
     connect_timeout: Duration,
     request_timeout: Duration,
+    extra_root_certificates: Vec<reqwest::Certificate>,
 }
 
 impl BitwardenHttpConfig {
     /// Build HTTP settings with explicit connect and whole-request timeouts.
     #[must_use]
-    pub const fn new(connect_timeout: Duration, request_timeout: Duration) -> Self {
+    pub fn new(connect_timeout: Duration, request_timeout: Duration) -> Self {
         Self {
             connect_timeout,
             request_timeout,
+            extra_root_certificates: Vec::new(),
         }
+    }
+
+    /// Add additional root certificates to the HTTP client's trust store.
+    ///
+    /// Certificates supplement, not replace, the system trust store. Use this
+    /// for Vaultwarden installs on a private CA.
+    #[must_use]
+    pub fn with_extra_root_certificates(mut self, certificates: Vec<reqwest::Certificate>) -> Self {
+        self.extra_root_certificates = certificates;
+        self
     }
 }
 
@@ -484,6 +499,7 @@ impl Default for BitwardenHttpConfig {
         Self {
             connect_timeout: DEFAULT_HTTP_CONNECT_TIMEOUT,
             request_timeout: DEFAULT_HTTP_REQUEST_TIMEOUT,
+            extra_root_certificates: Vec::new(),
         }
     }
 }

@@ -114,9 +114,10 @@ Use something else when:
   implemented and live-tested against both Vaultwarden and Bitwarden Cloud.
   For many teams this is the deciding gap; the `v0.1.x` line is realistic
   only for personal vaults or small per-user-key deployments.
-- **No custom CA bundle support.** TLS verification uses the system trust
-  store. Vaultwarden installs on a private CA must either expose the API
-  through a publicly-trusted certificate or wait for this to land.
+- **Custom CA bundle is supported** as of `v0.2`. Set `caBundle.pem` (inline)
+  or `caBundle.existingSecret.name` in the Helm values, or pass
+  `BWESO_CA_BUNDLE_FILE` directly when running the binary. The bundle is a
+  PEM file that supplements (not replaces) the system trust store.
 - **No rate limiting on `/v1/resolve`.** Bearer-token auth, the 16 KiB body
   cap, and single-flight cache refresh are the only DoS mitigations; deploy
   behind a NetworkPolicy and treat the webhook URL as a sensitive endpoint.

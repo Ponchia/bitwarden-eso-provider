@@ -57,6 +57,17 @@ config:
   deviceName: Vaultwarden ESO Provider
   deviceType: 22
 
+# Optional PEM CA bundle for Vaultwarden installs on a private CA. When set,
+# the contents are mounted at /var/run/secrets/bweso-ca/ca.pem and
+# BWESO_CA_BUNDLE_FILE points at it. Certificates supplement (not replace)
+# the system trust store.
+caBundle:
+  # Inline PEM (multi-cert OK). Mutually exclusive with existingSecret.
+  pem: ""
+  existingSecret:
+    name: ""
+    key: ca.pem
+
 selectorPolicy:
   # Empty lists mean allow every remoteRef.key visible to the configured
   # Bitwarden/Vaultwarden account. Configure one or both lists to deny by
