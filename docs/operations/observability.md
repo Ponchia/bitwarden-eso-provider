@@ -1,8 +1,8 @@
 # Observability
 
-Vaultwarden ESO Provider is a stateless HTTP webhook. It should be observable as a
-normal Kubernetes service without exposing vault item names, properties, secret
-values, API tokens, or derived keys.
+Vaultwarden ESO Provider is a stateless HTTP webhook. It should be
+observable as a normal Kubernetes service without exposing vault item
+names, properties, secret values, API tokens, or derived keys.
 
 Public error responses are intentionally coarse for the same reason. ESO may
 copy webhook error bodies into `ExternalSecret` status or events, so selector
