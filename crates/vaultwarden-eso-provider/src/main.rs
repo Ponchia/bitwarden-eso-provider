@@ -112,6 +112,10 @@ struct Args {
         default_value_t = false
     )]
     insecure_allow_unauthenticated: bool,
+    /// Maximum concurrent /v1/resolve requests. Excess requests are shed with
+    /// 503. Set to 0 to disable the cap (not recommended for production).
+    #[arg(long, env = "BWESO_RESOLVE_CONCURRENCY_LIMIT", default_value_t = 16)]
+    resolve_concurrency_limit: u32,
     /// Run one HTTP healthcheck request and exit.
     #[arg(long, env = "BWESO_HEALTHCHECK_URL")]
     healthcheck_url: Option<String>,
@@ -124,6 +128,7 @@ struct AppState {
     auth: WebhookAuth,
     metrics: Arc<AppMetrics>,
     lifecycle: Lifecycle,
+    resolve_semaphore: Option<Arc<tokio::sync::Semaphore>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -150,12 +155,20 @@ async fn main() -> anyhow::Result<()> {
     let listen = args.listen;
     let lifecycle = Lifecycle::default();
 
+    let resolve_semaphore = if args.resolve_concurrency_limit > 0 {
+        Some(Arc::new(tokio::sync::Semaphore::new(
+            args.resolve_concurrency_limit as usize,
+        )))
+    } else {
+        None
+    };
     let state = AppState {
         provider: provider_from_args(&args)?,
         selector_policy: SelectorPolicy::from_args(&args)?,
         auth: WebhookAuth::from_args(&args)?,
         metrics: Arc::new(AppMetrics::new()),
         lifecycle: lifecycle.clone(),
+        resolve_semaphore,
     };
 
     let app = build_router(state);
@@ -558,6 +571,24 @@ async fn resolve(
         return Err(auth_error());
     }
 
+    let _permit = match state
+        .resolve_semaphore
+        .as_ref()
+        .map(|semaphore| semaphore.clone().try_acquire_owned())
+    {
+        None => None,
+        Some(Ok(permit)) => Some(permit),
+        Some(Err(_)) => {
+            state.metrics.record_resolve_request(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "error",
+                "overloaded",
+                started.elapsed(),
+            );
+            return Err(public_error(StatusCode::SERVICE_UNAVAILABLE, "overloaded"));
+        }
+    };
+
     let request = match decode_resolve_request(request).await {
         Ok(request) => request,
         Err(status) => {
@@ -722,6 +753,7 @@ fn public_error_message(error_kind: &str) -> &'static str {
         "kdf_parameters" => "Bitwarden-compatible KDF parameters are unsupported",
         "sync_payload" => "Bitwarden-compatible sync payload is missing required unlock data",
         "endpoint" => "provider endpoint configuration is invalid",
+        "overloaded" => "provider is at concurrency limit; retry shortly",
         _ => "provider request failed",
     }
 }
@@ -819,6 +851,7 @@ mod tests {
             auth: WebhookAuth::DisabledInsecure,
             metrics: Arc::new(AppMetrics::new()),
             lifecycle: Lifecycle::default(),
+            resolve_semaphore: Some(Arc::new(tokio::sync::Semaphore::new(16))),
         }
     }
 
@@ -829,6 +862,7 @@ mod tests {
             auth: WebhookAuth::Required(Arc::new(token.to_string().into())),
             metrics: Arc::new(AppMetrics::new()),
             lifecycle: Lifecycle::default(),
+            resolve_semaphore: Some(Arc::new(tokio::sync::Semaphore::new(16))),
         }
     }
 
@@ -853,6 +887,7 @@ mod tests {
             http_connect_timeout_seconds: 5,
             http_request_timeout_seconds: 25,
             ca_bundle_file: None,
+            resolve_concurrency_limit: 16,
             webhook_auth_token: Some("test-webhook-token".to_string()),
             webhook_auth_token_file: None,
             insecure_allow_unauthenticated: false,
@@ -1068,6 +1103,10 @@ mod tests {
                 "Bitwarden-compatible sync payload is missing required unlock data",
             ),
             ("endpoint", "provider endpoint configuration is invalid"),
+            (
+                "overloaded",
+                "provider is at concurrency limit; retry shortly",
+            ),
             ("unknown", "provider request failed"),
         ];
 
@@ -1167,6 +1206,40 @@ mod tests {
             .await?;
 
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn resolve_sheds_when_semaphore_is_exhausted() -> TestResult {
+        let mut state = test_state(Arc::new(StaticProvider));
+        state.resolve_semaphore = Some(Arc::new(tokio::sync::Semaphore::new(1)));
+        let exhauster = state
+            .resolve_semaphore
+            .as_ref()
+            .ok_or("semaphore should be configured")?
+            .clone()
+            .try_acquire_owned()?;
+
+        let app = build_router(state);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/v1/resolve")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        r#"{"remoteRef":{"key":"name:app/database","property":"DATABASE_URL"}}"#,
+                    ))?,
+            )
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body = to_bytes(response.into_body(), usize::MAX).await?;
+        let body = std::str::from_utf8(&body)?;
+        assert!(body.contains("provider is at concurrency limit"));
+        assert!(!body.contains("app/database"));
+        assert!(!body.contains("DATABASE_URL"));
+        drop(exhauster);
         Ok(())
     }
 

@@ -134,6 +134,10 @@
           "pattern": "^[0-9]+$",
           "minimum": 0,
           "maximum": 255
+        },
+        "resolveConcurrencyLimit": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },

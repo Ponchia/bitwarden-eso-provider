@@ -56,6 +56,9 @@ config:
   deviceIdentifier: vaultwarden-eso-provider
   deviceName: Vaultwarden ESO Provider
   deviceType: 22
+  # Max concurrent /v1/resolve requests. Excess requests are shed with 503.
+  # Set to 0 to disable the cap (not recommended for production).
+  resolveConcurrencyLimit: 16
 
 # Optional PEM CA bundle for Vaultwarden installs on a private CA. When set,
 # the contents are mounted at /var/run/secrets/bweso-ca/ca.pem and

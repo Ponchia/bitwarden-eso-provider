@@ -45,8 +45,11 @@ deleted, old tags are yanked, no compatibility shim is kept. Targeted scope:
   plus `caBundle.pem` and `caBundle.existingSecret` Helm values. The bundle
   supplements the system trust store and is the path for Vaultwarden
   installs on a private CA.
-- Add per-source **rate limiting / concurrency cap** on `/v1/resolve` beyond
-  the current bearer-token + body-size + single-flight-refresh mitigations.
+- Added a **concurrency cap on `/v1/resolve`** via a tokio Semaphore in the
+  handler. Excess concurrent requests are shed with `503 overloaded`.
+  Configurable via `BWESO_RESOLVE_CONCURRENCY_LIMIT` (default 16) and the
+  `config.resolveConcurrencyLimit` Helm value. Per-source rate limiting
+  remains a follow-up item.
 - Collapse the six `BitwardenApiClient` constructors into a single
   `with_options(BitwardenApiClientOptions)` form.
 - Replace the hand-rolled `constant_time_eq` with the `subtle` crate (or the

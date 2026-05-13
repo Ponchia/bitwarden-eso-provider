@@ -118,9 +118,10 @@ Use something else when:
   or `caBundle.existingSecret.name` in the Helm values, or pass
   `BWESO_CA_BUNDLE_FILE` directly when running the binary. The bundle is a
   PEM file that supplements (not replaces) the system trust store.
-- **No rate limiting on `/v1/resolve`.** Bearer-token auth, the 16 KiB body
-  cap, and single-flight cache refresh are the only DoS mitigations; deploy
-  behind a NetworkPolicy and treat the webhook URL as a sensitive endpoint.
+- **Concurrency cap on `/v1/resolve`.** As of `v0.2`, excess concurrent
+  requests are shed with `503 overloaded`. Default cap is 16 in-flight;
+  configure via `BWESO_RESOLVE_CONCURRENCY_LIMIT` or `config.resolveConcurrencyLimit`.
+  Per-source rate limiting (e.g., per-token bucket) is not yet implemented.
 - Bitwarden Secrets Manager (`bws`) APIs are not supported by design — that
   product surface has first-party integrations.
 - Attachment properties fail with `unsupported_attachment`. For `v0.1.x`, store

@@ -85,6 +85,8 @@ spec:
               value: {{ .Values.config.deviceName | quote }}
             - name: BWESO_DEVICE_TYPE
               value: {{ .Values.config.deviceType | quote }}
+            - name: BWESO_RESOLVE_CONCURRENCY_LIMIT
+              value: {{ .Values.config.resolveConcurrencyLimit | quote }}
             {{- if .Values.selectorPolicy.allowedKeys }}
             - name: BWESO_ALLOWED_KEYS
               value: {{ join "," .Values.selectorPolicy.allowedKeys | quote }}
