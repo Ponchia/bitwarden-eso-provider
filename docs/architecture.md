@@ -16,7 +16,7 @@ The first target is an External Secrets Operator webhook provider:
 ```text
 ExternalSecret
   -> SecretStore(provider.webhook)
-  -> bitwarden-eso-provider
+  -> vaultwarden-eso-provider
   -> Bitwarden-compatible API
   -> decrypted item fields
   -> ESO-managed Kubernetes Secret

@@ -1,6 +1,6 @@
 # Observability
 
-Bitwarden ESO Provider is a stateless HTTP webhook. It should be observable as a
+Vaultwarden ESO Provider is a stateless HTTP webhook. It should be observable as a
 normal Kubernetes service without exposing vault item names, properties, secret
 values, API tokens, or derived keys.
 
@@ -84,10 +84,10 @@ the Prometheus scraper namespace to the provider Service on the `http` port.
 
 Optional examples are included but are not installed by the Helm chart:
 
-- [`../../examples/grafana/bitwarden-eso-provider-dashboard.json`](../../examples/grafana/bitwarden-eso-provider-dashboard.json)
+- [`../../examples/grafana/vaultwarden-eso-provider-dashboard.json`](../../examples/grafana/vaultwarden-eso-provider-dashboard.json)
   is an importable Grafana dashboard for readiness, request rates, error
   classes, latency, cache refreshes, and cache hit ratio.
-- [`../../examples/prometheus/bitwarden-eso-provider-rules.yaml`](../../examples/prometheus/bitwarden-eso-provider-rules.yaml)
+- [`../../examples/prometheus/vaultwarden-eso-provider-rules.yaml`](../../examples/prometheus/vaultwarden-eso-provider-rules.yaml)
   is a Prometheus Operator `PrometheusRule` starting point.
 
 Review datasource names, labels, alert severities, thresholds, and routing

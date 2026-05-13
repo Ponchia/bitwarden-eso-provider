@@ -15,8 +15,8 @@ The first public release includes:
 - Vaultwarden/single-origin endpoints and Bitwarden Cloud split endpoints.
 - Single-field `remoteRef` resolution and whole-item `dataFrom.extract`
   resolution.
-- `id:<item-id>` and `name:<item-name>` selectors, with bare selector lookup
-  kept only for pre-release compatibility.
+- `id:<item-id>` and `name:<item-name>` selectors; unprefixed bare keys
+  rejected with `400 validation`.
 - Provider-side selector allowlists for exact keys and key prefixes.
 - Explicit hard failures for unsupported shared organization items and
   attachments.
@@ -37,10 +37,10 @@ The first public release includes:
 so this is a hard rename: the old GHCR image package and OCI chart are
 deleted, old tags are yanked, no compatibility shim is kept. Targeted scope:
 
-- Rename the GitHub repository, binary crate, container image, and Helm chart
-  from `bitwarden-eso-provider` to `vaultwarden-eso-provider`. The crate
-  prefix `bweso-` (which refers to the Bitwarden-compatible API surface) can
-  stay; only the binary crate and the chart move.
+- Renamed the GitHub repository, binary crate, container image, and Helm
+  chart to `vaultwarden-eso-provider`. The crate prefix `bweso-` (which
+  refers to the Bitwarden-compatible API surface) stays; only the binary
+  crate, the chart, and the image moved.
 - Add **custom CA bundle support** (`BWESO_CA_BUNDLE_FILE` plus a Helm value)
   for Vaultwarden installs on a private CA. This is the most common gap for
   the self-hosted homelab target.

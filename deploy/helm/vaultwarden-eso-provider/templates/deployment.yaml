@@ -38,7 +38,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: bitwarden-eso-provider
+        - name: vaultwarden-eso-provider
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: {{ include "bweso.image" . | quote }}
