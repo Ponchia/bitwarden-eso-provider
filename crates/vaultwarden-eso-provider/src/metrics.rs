@@ -95,6 +95,22 @@ impl AppMetrics {
         });
     }
 
+    /// Seed the policy gauges from the startup evaluation so a file-backed
+    /// policy is observable immediately — including when
+    /// `reloadIntervalSeconds: 0` means no reload task ever runs, and during
+    /// the warm-up window before the first reload tick. Does NOT bump the
+    /// reload counter (no reload cycle has occurred); it records the active
+    /// counts and treats the startup evaluation as the initial success.
+    pub(crate) fn record_policy_baseline(&self, active_keys: usize, active_key_prefixes: usize) {
+        self.record(|inner| {
+            inner.policy_active_keys = active_keys as u64;
+            inner.policy_active_key_prefixes = active_key_prefixes as u64;
+            if inner.policy_last_success.is_none() {
+                inner.policy_last_success = Some(SystemTime::now());
+            }
+        });
+    }
+
     pub(crate) fn render(
         &self,
         ready: bool,
@@ -410,9 +426,10 @@ fn render_cache_metrics(output: &mut String, metrics: BitwardenCacheMetrics) {
 }
 
 fn render_policy_metrics(output: &mut String, snapshot: &MetricsInner) {
-    // Only emit once the reload task has run at least once. Deployments with
-    // no file-backed policy (no reload task) stay clean.
-    if snapshot.policy_reloads.is_empty() {
+    // Emit once a file-backed policy exists: either the startup baseline set
+    // `policy_last_success`, or at least one reload cycle ran. Deployments
+    // with no file-backed policy stay clean (neither is ever set).
+    if snapshot.policy_reloads.is_empty() && snapshot.policy_last_success.is_none() {
         return;
     }
 
@@ -668,5 +685,21 @@ mod tests {
         let output = metrics.render(true, None);
         assert!(!output.contains("bweso_policy_reloads_total"));
         assert!(!output.contains("bweso_policy_active_allowed_keys"));
+    }
+
+    #[test]
+    fn policy_baseline_makes_metrics_visible_with_zero_counters() {
+        let metrics = AppMetrics::new();
+        // No reload cycle yet (e.g. reloadIntervalSeconds:0), only startup.
+        metrics.record_policy_baseline(2, 0);
+
+        let output = metrics.render(true, None);
+
+        assert!(output.contains("bweso_policy_active_allowed_keys 2"));
+        assert!(output.contains("bweso_policy_active_allowed_key_prefixes 0"));
+        assert!(output.contains("bweso_policy_last_reload_success_timestamp_seconds "));
+        // Counter family present but all zero — no reload cycle has run.
+        assert!(output.contains("bweso_policy_reloads_total{outcome=\"success\"} 0"));
+        assert!(output.contains("bweso_policy_reloads_total{outcome=\"failure\"} 0"));
     }
 }

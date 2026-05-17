@@ -403,11 +403,15 @@ allow-list within one interval with **no provider restart and no missed-restart
 failure mode**. A transient unreadable or invalid file is logged and the last
 known-good policy keeps serving.
 
-A configured file source that evaluates to **zero entries** (empty,
-comment-only, or a ConfigMap accidentally emptied) is treated as an error, not
-as allow-all: the provider fails fast at startup and keeps the last known-good
-policy on reload. The legacy "no policy configured ⇒ allow all" behavior applies
-only when no inline list and no file source are set at all. See
+If the **effective** policy — inline entries plus every configured file —
+evaluates to **zero entries** (empty/comment-only file, or a ConfigMap
+accidentally emptied), that is treated as an error, not as allow-all: the
+provider fails fast at startup and keeps the last known-good policy on reload.
+It can never silently widen to allow-all. If inline entries are also
+configured, an emptied file instead narrows the effective policy to the inline
+baseline (still never wider) rather than erroring. The legacy "no policy
+configured ⇒ allow all" behavior applies only when no inline list and no file
+source are set at all. See
 [deploy/eso/selector-policy-configmap.example.yaml](deploy/eso/selector-policy-configmap.example.yaml).
 
 With more than one provider replica, a ConfigMap change propagates per pod
@@ -432,7 +436,10 @@ they also include `bweso_policy_reloads_total{outcome="success|unchanged|failure
 `bweso_policy_active_allowed_keys` / `bweso_policy_active_allowed_key_prefixes`
 (counts only — never the keys), and the last successful policy evaluation
 timestamp and age — alert on a rising `failure` rate or a growing
-last-success age to catch a wedged ConfigMap or stale policy.
+last-success age to catch a wedged ConfigMap or stale policy. The gauges are
+seeded from the startup evaluation, so they are present from `t0` even with
+`reloadIntervalSeconds: 0` (no reload task); the counter family stays at zero
+until the first reload cycle.
 
 The Helm chart can render a `ServiceMonitor` when Prometheus Operator CRDs are
 installed. Using the same `CHART_REF` from the install step:

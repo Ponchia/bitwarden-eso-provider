@@ -54,12 +54,19 @@ Add **optional file-backed policy sources that are re-read at runtime**:
   transient failure during a later reload is logged and the last
   known-good policy keeps serving (fail to last-good, not open/closed).
 - **Configured-empty is not allow-all.** The legacy "empty rule set ⇒
-  allow all" applies only when *no* policy source is configured. When any
-  file source is configured, an evaluation that yields zero entries
-  (empty, comment-only, or a ConfigMap accidentally emptied by a bad
-  GitOps render) is an error: it fails fast at startup and fails to
-  last-good on reload, rather than silently widening to allow-all on the
-  no-restart path.
+  allow all" applies only when *no* policy source is configured. When a
+  file source is configured and the **effective** policy (inline entries
+  plus every file) yields zero entries — empty/comment-only file, or a
+  ConfigMap emptied by a bad GitOps render — it is an error: fail fast at
+  startup, fail to last-good on reload, never silently widen to allow-all
+  on the no-restart path. If inline entries are also configured, an
+  emptied file narrows to the inline baseline (still never wider) instead
+  of erroring; this is the safe direction and is the documented contract.
+- **Policy metrics are seeded at startup**, so a file-backed policy is
+  observable from `t0` — including `reloadIntervalSeconds: 0` (no reload
+  task) and the warm-up window before the first tick. The reload counter
+  family stays zero until an actual reload cycle; the baseline only sets
+  the active-count gauges and the initial last-success timestamp.
 - Helm chart gains `selectorPolicy.configMap` (mounted read-only at
   `/etc/bweso/policy`) and `selectorPolicy.reloadIntervalSeconds`.
 
@@ -88,7 +95,15 @@ Add **optional file-backed policy sources that are re-read at runtime**:
   strictly coordinated changes.
 - A configured file is read in full on every interval. A defensive size
   cap (4 MiB, well above the ~1 MiB ConfigMap limit) rejects an
-  unexpectedly large file instead of slurping it each reload.
+  unexpectedly large file instead of slurping it each reload. The
+  `metadata()`-then-`read` is a benign TOCTOU: a ConfigMap projection is
+  an atomic `..data` symlink swap, so no torn read, and every generation
+  is bounded by the Kubernetes ConfigMap limit far under the cap.
+- The reload task is a single dedicated consumer of the `Lifecycle`
+  shutdown latch (`notify_one` + an `is_ready()` fast-path and a
+  post-select backstop). It is intentionally not a broadcast primitive;
+  adding more consumers would need `notify_waiters` plus its own
+  ordering handling.
 - Reload is observable: `bweso_policy_reloads_total` by outcome, active
   key/prefix counts, and last-success timestamp/age — counts only, never
   the selector keys, preserving redaction.

@@ -192,6 +192,16 @@ async fn main() -> anyhow::Result<()> {
         resolve_semaphore,
     };
 
+    // Seed policy gauges from the startup evaluation so a file-backed policy
+    // is observable from t0 — including reloadIntervalSeconds:0 (no task) and
+    // the warm-up window before the first reload tick.
+    if state.selector_policy.sources.has_file() {
+        let rules = state.selector_policy.snapshot();
+        state
+            .metrics
+            .record_policy_baseline(rules.allowed_keys.len(), rules.allowed_key_prefixes.len());
+    }
+
     // The task observes shutdown via Lifecycle and is reaped on runtime drop;
     // no handle to retain here.
     let _ = spawn_policy_reload(
@@ -1488,6 +1498,24 @@ mod tests {
             unreachable!("oversized policy file must be rejected");
         };
         assert!(error.to_string().contains("exceeding the"));
+        Ok(())
+    }
+
+    #[test]
+    fn policy_reload_disabled_when_interval_zero() -> TestResult {
+        let file = TempPolicyFile::new("interval0");
+        file.write("id:only\n")?;
+        let mut args = valid_args();
+        args.allowed_keys_file = Some(file.path());
+
+        let policy = SelectorPolicy::from_args(&args)?;
+        let metrics = Arc::new(AppMetrics::new());
+        let handle = spawn_policy_reload(policy, Lifecycle::default(), metrics, 0);
+
+        assert!(
+            handle.is_none(),
+            "interval 0 must not spawn a reload task (policy stays as evaluated at startup)"
+        );
         Ok(())
     }
 

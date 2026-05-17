@@ -5,6 +5,10 @@ use std::sync::{
 
 use tokio::sync::Notify;
 
+/// Process lifecycle state. The shutdown channel is a single-consumer latch
+/// (the policy reload task), not a broadcast: `notify_one` stores one permit
+/// so a late waiter still observes shutdown. Adding more consumers would
+/// require `notify_waiters` plus per-waiter ordering handling.
 #[derive(Clone)]
 pub(crate) struct Lifecycle {
     shutting_down: Arc<AtomicBool>,
