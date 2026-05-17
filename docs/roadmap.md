@@ -3,9 +3,9 @@
 This roadmap separates what shipped in the `v0.1.x` release line from
 follow-up work.
 
-## Unreleased
+## v0.2.1
 
-Landed on `main` after the tagged `v0.2.0`, not yet released:
+Released after `v0.2.0`:
 
 - **Hot-reloadable selector policy**: `BWESO_ALLOWED_KEYS_FILE` /
   `BWESO_ALLOWED_KEY_PREFIXES_FILE` plus `BWESO_POLICY_RELOAD_INTERVAL_SECONDS`
