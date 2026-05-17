@@ -372,6 +372,38 @@ For each namespace or trust boundary:
   security boundary and every namespace that can reference it may read the
   allowed items.
 
+## Hot-reloading the selector policy
+
+`selectorPolicy.allowedKeys` / `allowedKeyPrefixes` (env `BWESO_ALLOWED_KEYS` /
+`BWESO_ALLOWED_KEY_PREFIXES`) are read once at process start. Onboarding a new
+item by changing them requires a provider rollout.
+
+To onboard items without restarting the provider, source the allow-list from a
+ConfigMap instead:
+
+```bash
+helm upgrade --install bweso "${CHART_REF}" \
+  --namespace bweso-system \
+  --set-string config.singleOriginUrl='https://vaultwarden.example.com' \
+  --set-string credentials.existingSecret.name='bweso-credentials' \
+  --set-string selectorPolicy.configMap.name='bweso-selector-policy' \
+  --set selectorPolicy.reloadIntervalSeconds=30
+```
+
+The ConfigMap is mounted read-only at `/etc/bweso/policy` and wired via
+`BWESO_ALLOWED_KEYS_FILE` (and optionally `BWESO_ALLOWED_KEY_PREFIXES_FILE`).
+Each key holds one entry per line; commas also split, and blank lines and `#`
+comment lines are ignored. File entries are unioned with any inline lists.
+
+The provider re-reads the files every `reloadIntervalSeconds`
+(`BWESO_POLICY_RELOAD_INTERVAL_SECONDS`, default `30`; `0` reads once and never
+again) and hot-swaps the active policy. Because mounted ConfigMap volumes
+update in place, changing the ConfigMap — e.g. through GitOps — updates the
+allow-list within one interval with **no provider restart and no missed-restart
+failure mode**. A transient unreadable or invalid file is logged and the last
+known-good policy keeps serving. See
+[deploy/eso/selector-policy-configmap.example.yaml](deploy/eso/selector-policy-configmap.example.yaml).
+
 ## Observability
 
 The provider exposes:

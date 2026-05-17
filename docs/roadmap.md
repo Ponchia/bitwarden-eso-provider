@@ -50,6 +50,13 @@ deleted, old tags are yanked, no compatibility shim is kept. Targeted scope:
   Configurable via `BWESO_RESOLVE_CONCURRENCY_LIMIT` (default 16) and the
   `config.resolveConcurrencyLimit` Helm value. Per-source rate limiting
   remains a follow-up item.
+- Added a **hot-reloadable selector policy**: `BWESO_ALLOWED_KEYS_FILE` /
+  `BWESO_ALLOWED_KEY_PREFIXES_FILE` plus `BWESO_POLICY_RELOAD_INTERVAL_SECONDS`
+  and the `selectorPolicy.configMap` Helm values. A ConfigMap-sourced
+  allow-list is re-read on an interval and hot-swapped, so onboarding an item
+  no longer requires a provider restart. No file configured ⇒ behavior is
+  unchanged. See
+  [`decisions/0004-hot-reloadable-selector-policy.md`](decisions/0004-hot-reloadable-selector-policy.md).
 - Collapse the six `BitwardenApiClient` constructors into a single
   `with_options(BitwardenApiClientOptions)` form.
 - Replace the hand-rolled `constant_time_eq` with the `subtle` crate (or the
