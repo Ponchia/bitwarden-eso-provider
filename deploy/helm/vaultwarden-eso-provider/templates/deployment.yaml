@@ -96,6 +96,9 @@ spec:
               value: {{ join "," .Values.selectorPolicy.allowedKeyPrefixes | quote }}
             {{- end }}
             {{- if .Values.selectorPolicy.configMap.name }}
+            {{- if not (or .Values.selectorPolicy.configMap.keys.allowedKeys .Values.selectorPolicy.configMap.keys.allowedKeyPrefixes) }}
+            {{- fail "selectorPolicy.configMap.name is set but neither configMap.keys.allowedKeys nor configMap.keys.allowedKeyPrefixes is configured; the provider would have no policy file to read" }}
+            {{- end }}
             {{- if .Values.selectorPolicy.configMap.keys.allowedKeys }}
             - name: BWESO_ALLOWED_KEYS_FILE
               value: /etc/bweso/policy/{{ .Values.selectorPolicy.configMap.keys.allowedKeys }}

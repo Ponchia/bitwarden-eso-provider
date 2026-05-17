@@ -410,6 +410,13 @@ policy on reload. The legacy "no policy configured ⇒ allow all" behavior appli
 only when no inline list and no file source are set at all. See
 [deploy/eso/selector-policy-configmap.example.yaml](deploy/eso/selector-policy-configmap.example.yaml).
 
+With more than one provider replica, a ConfigMap change propagates per pod
+(kubelet projection) and is then picked up on each pod's own reload interval, so
+replicas may briefly serve slightly different policies during the rollout
+window. This is an allow-list, so the effect is transient over-restriction or
+over-permission bounded by the interval; pin `reloadIntervalSeconds: 0` and use
+a rollout if you need strictly coordinated policy changes.
+
 ## Observability
 
 The provider exposes:
@@ -420,7 +427,12 @@ The provider exposes:
 
 Metrics are low-cardinality and redacted. They cover HTTP requests, resolve
 outcomes, error classes, latency, cache hits, cache refreshes, and last
-successful cache refresh age.
+successful cache refresh age. When a file-backed selector policy is configured,
+they also include `bweso_policy_reloads_total{outcome="success|unchanged|failure"}`,
+`bweso_policy_active_allowed_keys` / `bweso_policy_active_allowed_key_prefixes`
+(counts only — never the keys), and the last successful policy evaluation
+timestamp and age — alert on a rising `failure` rate or a growing
+last-success age to catch a wedged ConfigMap or stale policy.
 
 The Helm chart can render a `ServiceMonitor` when Prometheus Operator CRDs are
 installed. Using the same `CHART_REF` from the install step:

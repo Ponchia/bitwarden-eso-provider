@@ -82,3 +82,13 @@ Add **optional file-backed policy sources that are re-read at runtime**:
   high-assurance boundaries.
 - Mounted-ConfigMap propagation latency (kubelet sync) adds to the
   configured interval before a change takes effect.
+- With multiple replicas, propagation + per-pod reload intervals mean
+  replicas can briefly serve different policies during a change window.
+  Bounded by the interval; `reloadIntervalSeconds: 0` + a rollout gives
+  strictly coordinated changes.
+- A configured file is read in full on every interval. A defensive size
+  cap (4 MiB, well above the ~1 MiB ConfigMap limit) rejects an
+  unexpectedly large file instead of slurping it each reload.
+- Reload is observable: `bweso_policy_reloads_total` by outcome, active
+  key/prefix counts, and last-success timestamp/age — counts only, never
+  the selector keys, preserving redaction.
