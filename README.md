@@ -421,6 +421,17 @@ window. This is an allow-list, so the effect is transient over-restriction or
 over-permission bounded by the interval; pin `reloadIntervalSeconds: 0` and use
 a rollout if you need strictly coordinated policy changes.
 
+On a reload *error* the provider keeps serving the last known-good policy (it
+never widens to allow-all). There is intentionally no fail-closed-on-reload
+mode: a transient ConfigMap blip should not cause a cluster-wide secret-sync
+outage. **High-assurance trust boundaries** that need coordinated, audited
+policy changes should set `reloadIntervalSeconds: 0` and change the policy via
+a normal rollout (a bad config then fails the pod at startup), and alert on a
+rising `bweso_policy_reloads_total{outcome="failure"}` rate and a growing
+last-success age. The hot-reload path is for low-friction onboarding, not for
+security-critical revocation timing — revoke by rotating/removing the item in
+the vault.
+
 ## Observability
 
 The provider exposes:

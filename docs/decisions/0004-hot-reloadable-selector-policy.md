@@ -107,3 +107,30 @@ Add **optional file-backed policy sources that are re-read at runtime**:
 - Reload is observable: `bweso_policy_reloads_total` by outcome, active
   key/prefix counts, and last-success timestamp/age — counts only, never
   the selector keys, preserving redaction.
+
+## Alternatives considered
+
+- **An opt-in fail-closed mode** (deny-all on a reload *error* instead of
+  retaining the last known-good policy): **rejected.** It is the wrong
+  default — a transient ConfigMap/filesystem error would cause a
+  cluster-wide secret-sync outage from a non-security event. The only
+  security-relevant failure direction (widening to allow-all) is already
+  impossible, and high-assurance deployments already have a complete,
+  simpler answer that needs no new code: `reloadIntervalSeconds: 0` plus
+  rollout-gated policy changes — a bad config then fails the pod at
+  startup (fail-closed on bad config) and every change is audited.
+  Revocation is normally driven by rotating/removing the secret in the
+  vault, not by the allow-list. Operators who need to detect a wedged
+  policy should alert on `bweso_policy_reloads_total{outcome="failure"}`
+  and a growing last-success age. Revisit only if a concrete requirement
+  appears; it is ~30 lines plus tests to add later.
+
+## High-assurance posture (recommended)
+
+For trust boundaries that require coordinated, audited policy changes:
+set `reloadIntervalSeconds: 0` (or omit the ConfigMap) and change the
+policy via a normal rollout. Alert on a rising
+`bweso_policy_reloads_total{outcome="failure"}` rate and a growing
+`bweso_policy_last_reload_success_age_seconds` to catch a stale or
+wedged policy. The hot-reload path is for low-friction onboarding, not
+for security-critical revocation timing.
