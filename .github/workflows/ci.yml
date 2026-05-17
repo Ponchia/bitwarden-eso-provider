@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - main
+  schedule:
+    - cron: "21 5 * * 2"
 
 permissions:
   contents: read
@@ -178,3 +180,6 @@ jobs:
 
       - name: Check Dockerfile
         run: docker buildx build --check .
+
+      - name: Build image
+        run: docker buildx build --load -t vaultwarden-eso-provider:ci .

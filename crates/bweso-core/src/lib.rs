@@ -1,14 +1,14 @@
 #![forbid(unsafe_code)]
 
-//! Shared data types for Bitwarden ESO Provider.
+//! Shared data types for Vaultwarden ESO Provider.
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// A remote secret selector supplied by an integration adapter.
-#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteRef {
     /// Provider-specific item key.
@@ -21,8 +21,19 @@ pub struct RemoteRef {
     pub version: Option<String>,
 }
 
+impl fmt::Debug for RemoteRef {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("RemoteRef")
+            .field("key", &"<redacted>")
+            .field("property", &self.property.as_ref().map(|_| "<redacted>"))
+            .field("version", &self.version.as_ref().map(|_| "<present>"))
+            .finish()
+    }
+}
+
 /// A resolved secret document before adapter-specific response formatting.
-#[derive(Debug, Clone, Eq, PartialEq, Default, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SecretDocument {
     /// Secret key-value pairs.
@@ -30,6 +41,16 @@ pub struct SecretDocument {
     /// Non-sensitive metadata about the resolved source.
     #[serde(default)]
     pub metadata: BTreeMap<String, String>,
+}
+
+impl fmt::Debug for SecretDocument {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SecretDocument")
+            .field("data_keys", &self.data.len())
+            .field("metadata_keys", &self.metadata.len())
+            .finish()
+    }
 }
 
 impl SecretDocument {

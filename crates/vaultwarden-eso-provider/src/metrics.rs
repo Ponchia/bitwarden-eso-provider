@@ -126,7 +126,7 @@ impl AppMetrics {
 
         append_line(
             &mut output,
-            format_args!("# HELP bweso_build_info Bitwarden ESO Provider build information."),
+            format_args!("# HELP bweso_build_info Vaultwarden ESO Provider build information."),
         );
         append_line(&mut output, format_args!("# TYPE bweso_build_info gauge"));
         append_line(

@@ -485,7 +485,7 @@ impl BitwardenHttpConfig {
 
     /// Add additional root certificates to the HTTP client's trust store.
     ///
-    /// Certificates supplement, not replace, the system trust store. Use this
+    /// Certificates supplement the bundled Web PKI trust roots. Use this
     /// for Vaultwarden installs on a private CA.
     #[must_use]
     pub fn with_extra_root_certificates(mut self, certificates: Vec<reqwest::Certificate>) -> Self {
@@ -609,8 +609,8 @@ impl Default for BitwardenDevice {
     fn default() -> Self {
         Self {
             device_type: DEFAULT_DEVICE_TYPE_SERVER,
-            identifier: "bitwarden-eso-provider".to_string(),
-            name: "Bitwarden ESO Provider".to_string(),
+            identifier: "vaultwarden-eso-provider".to_string(),
+            name: "Vaultwarden ESO Provider".to_string(),
         }
     }
 }
@@ -635,12 +635,12 @@ pub struct SyncResponse {
     pub ciphers: Vec<EncryptedCipher>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct PreloginRequest<'a> {
     email: &'a str,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PreloginResponse {
     #[serde(alias = "Kdf")]
@@ -666,7 +666,7 @@ impl TryFrom<PreloginResponse> for KdfConfig {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct ApiKeyTokenRequest<'a> {
     #[serde(rename = "grant_type")]
     grant_type: &'static str,
@@ -683,7 +683,7 @@ struct ApiKeyTokenRequest<'a> {
     device_type: u8,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct TokenResponse {
     #[serde(alias = "accessToken")]
     access_token: String,
@@ -701,7 +701,7 @@ struct TokenResponse {
     user_decryption_options: Option<UserDecryptionOptionsResponse>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct UserDecryptionOptionsResponse {
     #[serde(
         default,
@@ -711,7 +711,7 @@ struct UserDecryptionOptionsResponse {
     master_password_unlock: Option<MasterPasswordUnlockResponse>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct MasterPasswordUnlockResponse {
     #[serde(rename = "kdf", alias = "Kdf")]
     kdf: TokenKdfResponse,
@@ -748,7 +748,7 @@ impl TryFrom<MasterPasswordUnlockResponse> for MasterPasswordUnlockData {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct TokenKdfResponse {
     #[serde(rename = "kdfType", alias = "KdfType")]
     kdf_type: u8,
@@ -1561,8 +1561,8 @@ mod tests {
             && form.scope == "api"
             && form.client_id == "user.fixture"
             && form.client_secret == "api-secret"
-            && form.device_identifier == "bitwarden-eso-provider"
-            && form.device_name == "Bitwarden ESO Provider"
+            && form.device_identifier == "vaultwarden-eso-provider"
+            && form.device_name == "Vaultwarden ESO Provider"
             && form.device_type == DEFAULT_DEVICE_TYPE_SERVER;
         if !valid {
             return (

@@ -1,5 +1,7 @@
 //! Bitwarden-compatible cipher response models and field extraction.
 
+use std::fmt;
+
 use bweso_core::SecretDocument;
 use serde::Deserialize;
 use thiserror::Error;
@@ -8,7 +10,7 @@ use zeroize::Zeroize;
 use crate::crypto::{AuthenticatedSymmetricKey, CryptoError, EncryptedString};
 
 /// Encrypted Bitwarden-compatible cipher as returned by sync and cipher detail APIs.
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EncryptedCipher {
     /// Cipher identifier.
@@ -37,6 +39,26 @@ pub struct EncryptedCipher {
     /// SSH key payload for SSH key ciphers.
     #[serde(default)]
     pub ssh_key: Option<EncryptedSshKey>,
+}
+
+impl fmt::Debug for EncryptedCipher {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("EncryptedCipher")
+            .field("id", &"<redacted>")
+            .field("cipher_type", &self.cipher_type)
+            .field(
+                "organization_id",
+                &self.organization_id.as_ref().map(|_| "<redacted>"),
+            )
+            .field("key", &self.key.as_ref().map(|_| "<redacted>"))
+            .field("name", &self.name.as_ref().map(|_| "<redacted>"))
+            .field("notes", &self.notes.as_ref().map(|_| "<redacted>"))
+            .field("fields", &self.fields.len())
+            .field("login", &self.login.as_ref().map(|_| "<present>"))
+            .field("ssh_key", &self.ssh_key.as_ref().map(|_| "<present>"))
+            .finish()
+    }
 }
 
 impl EncryptedCipher {
@@ -90,7 +112,7 @@ impl EncryptedCipher {
 }
 
 /// Encrypted custom field.
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EncryptedField {
     /// Encrypted custom field name.
@@ -115,7 +137,7 @@ impl EncryptedField {
 }
 
 /// Encrypted login payload.
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EncryptedLogin {
     /// Encrypted username.
@@ -140,7 +162,7 @@ impl EncryptedLogin {
 }
 
 /// Encrypted SSH key payload.
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EncryptedSshKey {
     /// Encrypted private key.
@@ -165,7 +187,7 @@ impl EncryptedSshKey {
 }
 
 /// Decrypted cipher ready for field extraction.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct DecryptedCipher {
     /// Cipher identifier.
     pub id: String,
@@ -183,6 +205,25 @@ pub struct DecryptedCipher {
     pub login: Option<DecryptedLogin>,
     /// Decrypted SSH key payload.
     pub ssh_key: Option<DecryptedSshKey>,
+}
+
+impl fmt::Debug for DecryptedCipher {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("DecryptedCipher")
+            .field("id", &"<redacted>")
+            .field("cipher_type", &self.cipher_type)
+            .field(
+                "organization_id",
+                &self.organization_id.as_ref().map(|_| "<redacted>"),
+            )
+            .field("name", &self.name.as_ref().map(|_| "<redacted>"))
+            .field("notes", &self.notes.as_ref().map(|_| "<redacted>"))
+            .field("fields", &self.fields.len())
+            .field("login", &self.login.as_ref().map(|_| "<present>"))
+            .field("ssh_key", &self.ssh_key.as_ref().map(|_| "<present>"))
+            .finish()
+    }
 }
 
 impl DecryptedCipher {
@@ -313,7 +354,7 @@ impl DecryptedCipher {
 }
 
 /// Decrypted custom field.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct DecryptedField {
     /// Decrypted field name.
     pub name: Option<String>,
@@ -323,8 +364,19 @@ pub struct DecryptedField {
     pub field_type: Option<u8>,
 }
 
+impl fmt::Debug for DecryptedField {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("DecryptedField")
+            .field("name", &self.name.as_ref().map(|_| "<redacted>"))
+            .field("value", &self.value.as_ref().map(|_| "<redacted>"))
+            .field("field_type", &self.field_type)
+            .finish()
+    }
+}
+
 /// Decrypted login payload.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct DecryptedLogin {
     /// Decrypted username.
     pub username: Option<String>,
@@ -334,8 +386,19 @@ pub struct DecryptedLogin {
     pub totp: Option<String>,
 }
 
+impl fmt::Debug for DecryptedLogin {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("DecryptedLogin")
+            .field("username", &self.username.as_ref().map(|_| "<redacted>"))
+            .field("password", &self.password.as_ref().map(|_| "<redacted>"))
+            .field("totp", &self.totp.as_ref().map(|_| "<redacted>"))
+            .finish()
+    }
+}
+
 /// Decrypted SSH key payload.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct DecryptedSshKey {
     /// Decrypted private key.
     pub private_key: Option<String>,
@@ -345,8 +408,28 @@ pub struct DecryptedSshKey {
     pub key_fingerprint: Option<String>,
 }
 
+impl fmt::Debug for DecryptedSshKey {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("DecryptedSshKey")
+            .field(
+                "private_key",
+                &self.private_key.as_ref().map(|_| "<redacted>"),
+            )
+            .field(
+                "public_key",
+                &self.public_key.as_ref().map(|_| "<redacted>"),
+            )
+            .field(
+                "key_fingerprint",
+                &self.key_fingerprint.as_ref().map(|_| "<redacted>"),
+            )
+            .finish()
+    }
+}
+
 /// Cipher model and extraction errors.
-#[derive(Debug, Error)]
+#[derive(Error)]
 pub enum CipherError {
     /// Crypto failure.
     #[error(transparent)]
@@ -355,13 +438,13 @@ pub enum CipherError {
     #[error("cipher property must not be blank")]
     BlankProperty,
     /// Requested property does not exist.
-    #[error("cipher property {property} was not found")]
+    #[error("cipher property was not found")]
     MissingProperty {
         /// Requested property name.
         property: String,
     },
     /// The cipher has no conventional fields that can be mapped to a Secret.
-    #[error("cipher {id} has no extractable secret fields")]
+    #[error("cipher has no extractable secret fields")]
     NoExtractableFields {
         /// Cipher identifier.
         id: String,
@@ -369,6 +452,18 @@ pub enum CipherError {
     /// Attachment download and decryption is intentionally out of scope for this release.
     #[error("Bitwarden attachment extraction is not supported by this provider release")]
     UnsupportedAttachment,
+}
+
+impl fmt::Debug for CipherError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Crypto(error) => formatter.debug_tuple("Crypto").field(error).finish(),
+            Self::BlankProperty => formatter.write_str("BlankProperty"),
+            Self::MissingProperty { .. } => formatter.write_str("MissingProperty"),
+            Self::NoExtractableFields { .. } => formatter.write_str("NoExtractableFields"),
+            Self::UnsupportedAttachment => formatter.write_str("UnsupportedAttachment"),
+        }
+    }
 }
 
 fn decrypt_optional(

@@ -12,7 +12,8 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 async fn resolves_configured_live_bitwarden_compatible_secret() -> TestResult {
     let Some(config) = LiveConfig::from_env()? else {
         eprintln!(
-            "skipping live Bitwarden-compatible test; set BWESO_TEST_SINGLE_ORIGIN_URL \
+            "skipping live Bitwarden-compatible test; set BWESO_TEST_LIVE=true, \
+             BWESO_TEST_SINGLE_ORIGIN_URL \
              or both BWESO_TEST_IDENTITY_URL and BWESO_TEST_API_URL, plus \
              BWESO_TEST_CLIENT_ID, BWESO_TEST_CLIENT_SECRET, BWESO_TEST_MASTER_PASSWORD, \
              and BWESO_TEST_ITEM_KEY or BWESO_TEST_ALLOW_ANY_ITEM=true"
@@ -70,10 +71,14 @@ enum LiveSelectorConfig {
 
 impl LiveConfig {
     fn from_env() -> Result<Option<Self>, Box<dyn std::error::Error>> {
+        if !truthy_env("BWESO_TEST_LIVE") {
+            return Ok(None);
+        }
+
         let endpoint = match (
-            optional_env_any(&["BWESO_TEST_SINGLE_ORIGIN_URL", "BWESO_SINGLE_ORIGIN_URL"]),
-            optional_env_any(&["BWESO_TEST_IDENTITY_URL", "BWESO_IDENTITY_URL"]),
-            optional_env_any(&["BWESO_TEST_API_URL", "BWESO_API_URL"]),
+            optional_env("BWESO_TEST_SINGLE_ORIGIN_URL"),
+            optional_env("BWESO_TEST_IDENTITY_URL"),
+            optional_env("BWESO_TEST_API_URL"),
         ) {
             (Some(single_origin_url), None, None) => {
                 LiveEndpointConfig::SingleOrigin { single_origin_url }
@@ -90,17 +95,13 @@ impl LiveConfig {
             }
         };
 
-        let Some(client_id) = optional_env_any(&["BWESO_TEST_CLIENT_ID", "BWESO_CLIENT_ID"]) else {
+        let Some(client_id) = optional_env("BWESO_TEST_CLIENT_ID") else {
             return Ok(None);
         };
-        let Some(client_secret) =
-            optional_env_any(&["BWESO_TEST_CLIENT_SECRET", "BWESO_CLIENT_SECRET"])
-        else {
+        let Some(client_secret) = optional_env("BWESO_TEST_CLIENT_SECRET") else {
             return Ok(None);
         };
-        let Some(master_password) =
-            optional_env_any(&["BWESO_TEST_MASTER_PASSWORD", "BWESO_MASTER_PASSWORD"])
-        else {
+        let Some(master_password) = optional_env("BWESO_TEST_MASTER_PASSWORD") else {
             return Ok(None);
         };
         let property = optional_env("BWESO_TEST_PROPERTY");
@@ -220,10 +221,6 @@ fn config_error(message: &'static str) -> Box<dyn std::error::Error> {
 
 fn dynamic_test_error(message: String) -> Box<dyn std::error::Error> {
     std::io::Error::new(std::io::ErrorKind::InvalidInput, message).into()
-}
-
-fn optional_env_any(names: &[&str]) -> Option<String> {
-    names.iter().find_map(|name| optional_env(name))
 }
 
 fn truthy_env(name: &str) -> bool {

@@ -32,6 +32,7 @@ use subtle::ConstantTimeEq;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use url::Url;
+use zeroize::Zeroize;
 
 mod lifecycle;
 mod metrics;
@@ -67,13 +68,13 @@ struct Args {
     #[arg(
         long,
         env = "BWESO_DEVICE_IDENTIFIER",
-        default_value = "bitwarden-eso-provider"
+        default_value = "vaultwarden-eso-provider"
     )]
     device_identifier: String,
     #[arg(
         long,
         env = "BWESO_DEVICE_NAME",
-        default_value = "Bitwarden ESO Provider"
+        default_value = "Vaultwarden ESO Provider"
     )]
     device_name: String,
     #[arg(long, env = "BWESO_DEVICE_TYPE", default_value_t = 22)]
@@ -106,6 +107,11 @@ struct Args {
     /// `--allowed-key-prefix`.
     #[arg(long, env = "BWESO_ALLOWED_KEY_PREFIXES_FILE")]
     allowed_key_prefixes_file: Option<PathBuf>,
+    /// Explicitly allow every selector visible to the configured account. This is
+    /// intended only when the Bitwarden/Vaultwarden account is already scoped to
+    /// the same trust boundary.
+    #[arg(long, env = "BWESO_ALLOW_ALL_SELECTORS", default_value_t = false)]
+    allow_all_selectors: bool,
     /// How often to re-read the policy files, in seconds. `0` disables
     /// reloading (the files are still read once at startup). Ignored when no
     /// policy file is configured.
@@ -119,8 +125,8 @@ struct Args {
     http_connect_timeout_seconds: u64,
     #[arg(long, env = "BWESO_HTTP_REQUEST_TIMEOUT_SECONDS", default_value_t = 25)]
     http_request_timeout_seconds: u64,
-    /// PEM-encoded CA bundle to trust in addition to the system store. Use for
-    /// Vaultwarden installs on a private CA.
+    /// PEM-encoded CA bundle to trust in addition to the bundled Web PKI roots.
+    /// Use for Vaultwarden installs on a private CA.
     #[arg(long, env = "BWESO_CA_BUNDLE_FILE")]
     ca_bundle_file: Option<PathBuf>,
     #[arg(long, env = "BWESO_WEBHOOK_AUTH_TOKEN")]
@@ -167,7 +173,7 @@ struct ErrorResponse {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     init_tracing();
-    let args = Args::parse();
+    let mut args = Args::parse();
     if let Some(url) = args.healthcheck_url.as_deref() {
         run_healthcheck(url)?;
         return Ok(());
@@ -191,6 +197,7 @@ async fn main() -> anyhow::Result<()> {
         lifecycle: lifecycle.clone(),
         resolve_semaphore,
     };
+    args.zeroize_sensitive();
 
     // Seed policy gauges from the startup evaluation so a file-backed policy
     // is observable from t0 — including reloadIntervalSeconds:0 (no task) and
@@ -223,12 +230,12 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Immutable evaluated allow-list. An empty rule set allows every selector,
-/// preserving the original "nothing configured means allow all" behavior.
-/// This allow-all-on-empty is only ever reached when NO policy source is
-/// configured: [`PolicySources::evaluate`] rejects an empty result whenever a
-/// file source is configured, so an emptied/comment-only `ConfigMap` cannot
-/// silently widen access to every item.
+/// Immutable evaluated allow-list. An empty rule set allows every selector only
+/// after the operator explicitly opts in with `BWESO_ALLOW_ALL_SELECTORS=true`.
+/// [`SelectorPolicy::from_args`] rejects an unconfigured policy otherwise, and
+/// [`PolicySources::evaluate`] rejects an empty result whenever a file source is
+/// configured, so an emptied/comment-only `ConfigMap` cannot silently widen
+/// access to every item.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 struct PolicyRules {
     allowed_keys: Vec<String>,
@@ -281,11 +288,10 @@ impl PolicySources {
 
         // A file source is an explicit intent to run an allow-list. If it
         // evaluates to zero entries (empty, comment-only, or accidentally
-        // emptied by a bad GitOps render), DO NOT fall back to the
-        // "empty == allow all" legacy behavior — that would silently widen
-        // access to every item visible to the provider account, on the
-        // no-restart hot path. Erroring here makes startup fail fast and makes
-        // a reload keep the last known-good policy (fail to last-good).
+        // emptied by a bad GitOps render), DO NOT treat it as explicit
+        // allow-all — that would silently widen access to every item visible to
+        // the provider account on the no-restart hot path. Erroring here makes
+        // startup fail fast and makes a reload keep the last known-good policy.
         if self.has_file() && allowed_keys.is_empty() && allowed_key_prefixes.is_empty() {
             bail!(
                 "selector policy file source is configured but evaluated to zero entries; \
@@ -325,6 +331,20 @@ impl SelectorPolicy {
     }
 
     fn from_args(args: &Args) -> anyhow::Result<Self> {
+        let has_inline_entries =
+            !args.allowed_keys.is_empty() || !args.allowed_key_prefixes.is_empty();
+        let has_file_entries =
+            args.allowed_keys_file.is_some() || args.allowed_key_prefixes_file.is_some();
+        if !args.allow_all_selectors && !has_inline_entries && !has_file_entries {
+            bail!(
+                "configure selector policy with allowed keys/prefixes, or explicitly set BWESO_ALLOW_ALL_SELECTORS=true when the provider account is already scoped to this trust boundary"
+            );
+        }
+        if args.allow_all_selectors && (has_inline_entries || has_file_entries) {
+            bail!(
+                "configure either selector allow-list entries or BWESO_ALLOW_ALL_SELECTORS=true, not both"
+            );
+        }
         let sources = PolicySources {
             inline_keys: normalize_policy_entries(&args.allowed_keys, "allowed_key")?,
             inline_key_prefixes: normalize_policy_entries(
@@ -369,6 +389,22 @@ impl SelectorPolicy {
         *guard = Arc::new(next);
         Ok(true)
     }
+}
+
+impl Args {
+    fn zeroize_sensitive(&mut self) {
+        zeroize_option(&mut self.client_id);
+        zeroize_option(&mut self.client_secret);
+        zeroize_option(&mut self.master_password);
+        zeroize_option(&mut self.webhook_auth_token);
+    }
+}
+
+fn zeroize_option(value: &mut Option<String>) {
+    if let Some(secret) = value {
+        secret.zeroize();
+    }
+    *value = None;
 }
 
 fn normalize_policy_entries(entries: &[String], name: &'static str) -> anyhow::Result<Vec<String>> {
@@ -661,14 +697,14 @@ impl WebhookAuth {
             args.webhook_auth_token_file.as_deref(),
             "webhook_auth_token",
         )?;
-        match (
-            token.as_deref(),
-            args.insecure_allow_unauthenticated,
-        ) {
-            (Some(_), true) => bail!(
-                "configure either BWESO_WEBHOOK_AUTH_TOKEN or BWESO_INSECURE_ALLOW_UNAUTHENTICATED=true, not both"
-            ),
-            (Some(token), false) => Ok(Self::Required(Arc::new(token.to_string().into()))),
+        match (token, args.insecure_allow_unauthenticated) {
+            (Some(mut token), true) => {
+                token.zeroize();
+                bail!(
+                    "configure either BWESO_WEBHOOK_AUTH_TOKEN or BWESO_INSECURE_ALLOW_UNAUTHENTICATED=true, not both"
+                )
+            }
+            (Some(token), false) => Ok(Self::Required(Arc::new(token.into()))),
             (None, true) => {
                 tracing::warn!(
                     "webhook authentication is disabled; use only for local or isolated tests"
@@ -1146,6 +1182,7 @@ mod tests {
             allowed_key_prefixes: Vec::new(),
             allowed_keys_file: None,
             allowed_key_prefixes_file: None,
+            allow_all_selectors: true,
             policy_reload_interval_seconds: 30,
             http_connect_timeout_seconds: 5,
             http_request_timeout_seconds: 25,
@@ -1287,7 +1324,7 @@ mod tests {
     }
 
     #[test]
-    fn selector_policy_allows_everything_when_unconfigured() -> TestResult {
+    fn selector_policy_allows_everything_with_explicit_allow_all() -> TestResult {
         let policy = SelectorPolicy::from_args(&valid_args())?;
 
         assert!(policy.allows("id:item-a"));
@@ -1296,10 +1333,36 @@ mod tests {
     }
 
     #[test]
+    fn selector_policy_requires_allow_list_or_explicit_allow_all() {
+        let mut args = valid_args();
+        args.allow_all_selectors = false;
+
+        let Some(error) = SelectorPolicy::from_args(&args).err() else {
+            unreachable!("unconfigured selector policy should fail without explicit allow-all");
+        };
+
+        assert!(error.to_string().contains("BWESO_ALLOW_ALL_SELECTORS"));
+    }
+
+    #[test]
+    fn selector_policy_rejects_allow_all_with_allow_list() {
+        let mut args = valid_args();
+        args.allow_all_selectors = true;
+        args.allowed_keys = vec!["id:item-a".to_string()];
+
+        let Some(error) = SelectorPolicy::from_args(&args).err() else {
+            unreachable!("allow-all and allow-list should be mutually exclusive");
+        };
+
+        assert!(error.to_string().contains("not both"));
+    }
+
+    #[test]
     fn selector_policy_allows_exact_keys_and_prefixes() -> TestResult {
         let mut args = valid_args();
         args.allowed_keys = vec!["id:item-a".to_string()];
         args.allowed_key_prefixes = vec!["id:team-a/".to_string()];
+        args.allow_all_selectors = false;
         let policy = SelectorPolicy::from_args(&args)?;
 
         assert!(policy.allows("id:item-a"));
@@ -1313,6 +1376,7 @@ mod tests {
     fn selector_policy_rejects_blank_entries() {
         let mut args = valid_args();
         args.allowed_keys = vec!["id:item-a".to_string(), " ".to_string()];
+        args.allow_all_selectors = false;
 
         let Some(error) = SelectorPolicy::from_args(&args).err() else {
             unreachable!("blank policy entry should fail");
@@ -1359,6 +1423,65 @@ mod tests {
         }
     }
 
+    const TEST_CA_PEM: &str = "\
+-----BEGIN CERTIFICATE-----
+MIIDETCCAfmgAwIBAgIUSlo2f67ehKubY3NrE56UeO6UtEgwDQYJKoZIhvcNAQEL
+BQAwGDEWMBQGA1UEAwwNYndlc28tdGVzdC1jYTAeFw0yNjA1MTcxMjAyMzRaFw0y
+NjA1MTgxMjAyMzRaMBgxFjAUBgNVBAMMDWJ3ZXNvLXRlc3QtY2EwggEiMA0GCSqG
+SIb3DQEBAQUAA4IBDwAwggEKAoIBAQC9TjwVnieLgFTIsMdx9iM/wiE0792d3VHV
+u9/rC0d59O0yWHtlFAsRT4qKQgIVw2TaAp3IrkykmhPlxoX/gbWSsxTnpmBeVG2D
+y8FOmLnkb5u+mA238/BDYHvitxflQwSd4L/JNVi913nbYgTtmDqWGpWP643PlPXm
+NryDkHuzauJM0q5m7r+Lo1rTS/WXbuc4ArEYQvRowYEteehlo622pfGSJXPdKHaM
+Zgzol5l0xClWMeWskIaZOKlksPXAT1/n7hvBQQUr28+w+n/xXu/p4/89jEqRLx5w
+jSnahgc93orpO3UWRDibypg0MEVcOsAPCk9BGpZDZeKPCDFeNVORAgMBAAGjUzBR
+MB0GA1UdDgQWBBQhSR0/X5F8Xv6ctTjZIdciJxKOFDAfBgNVHSMEGDAWgBQhSR0/
+X5F8Xv6ctTjZIdciJxKOFDAPBgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUA
+A4IBAQCgEju0Nv7tdND/QBV/2P2kg3QTpuwTJp3Ik1IrlvNWSfp8RLIR0Dio6VLx
+tMvljLF7PI0x6rKUGSxHjrD+pFi8tJE7jQVUcKMsvylZWXBPot5t140ATOlDa3Ds
+GRhGSvWALmr7f4FRONCi/+mPoYLShQnlMjpsyQCFD/krnaflxEYT8jaaehio8XlF
+Ss8xqydle1hGxqAcjwm5U2+WNdWrgbgEN8lkMADBu4Sq8lG4RxFPehXsFqc1ETNc
+cUZqSvmpFg+x1PNHCg8Fh1WuysQRSoLFPW5szcmj+P3Q/v/L7PuEarqvluQzz4vf
+frW69DSxg6/fcNRyvdTH+twvVnzH
+-----END CERTIFICATE-----
+";
+
+    #[test]
+    fn ca_bundle_loader_accepts_valid_pem_bundle() -> TestResult {
+        let file = TempPolicyFile::new("ca-valid");
+        file.write(TEST_CA_PEM)?;
+
+        let certificates = load_extra_root_certificates(Some(&file.path()))?;
+
+        assert_eq!(certificates.len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn ca_bundle_loader_rejects_empty_pem_bundle() -> TestResult {
+        let file = TempPolicyFile::new("ca-empty");
+        file.write("")?;
+
+        let Some(error) = load_extra_root_certificates(Some(&file.path())).err() else {
+            unreachable!("empty CA bundle should fail");
+        };
+
+        assert!(error.to_string().contains("contained no PEM certificates"));
+        Ok(())
+    }
+
+    #[test]
+    fn ca_bundle_loader_rejects_invalid_pem_bundle() -> TestResult {
+        let file = TempPolicyFile::new("ca-invalid");
+        file.write("not a certificate")?;
+
+        let Some(error) = load_extra_root_certificates(Some(&file.path())).err() else {
+            unreachable!("invalid CA bundle should fail");
+        };
+
+        assert!(error.to_string().contains("PEM certificates"));
+        Ok(())
+    }
+
     #[test]
     fn selector_policy_reads_and_unions_file_entries() -> TestResult {
         let file = TempPolicyFile::new("union");
@@ -1366,6 +1489,7 @@ mod tests {
         let mut args = valid_args();
         args.allowed_keys = vec!["id:from-inline".to_string()];
         args.allowed_keys_file = Some(file.path());
+        args.allow_all_selectors = false;
 
         let policy = SelectorPolicy::from_args(&args)?;
 
@@ -1383,6 +1507,7 @@ mod tests {
         file.write("id:initial\n")?;
         let mut args = valid_args();
         args.allowed_keys_file = Some(file.path());
+        args.allow_all_selectors = false;
 
         let policy = SelectorPolicy::from_args(&args)?;
         assert!(policy.allows("id:initial"));
@@ -1404,6 +1529,7 @@ mod tests {
         let missing = TempPolicyFile::new("missing");
         let mut args = valid_args();
         args.allowed_keys_file = Some(missing.path());
+        args.allow_all_selectors = false;
 
         let Some(error) = SelectorPolicy::from_args(&args).err() else {
             unreachable!("missing policy file should fail at startup");
@@ -1420,6 +1546,7 @@ mod tests {
         file.write("id:good\n")?;
         let mut args = valid_args();
         args.allowed_key_prefixes_file = Some(file.path());
+        args.allow_all_selectors = false;
 
         let policy = SelectorPolicy::from_args(&args)?;
         assert!(policy.allows("id:good/db"));
@@ -1447,6 +1574,7 @@ mod tests {
         file.write("# only comments\n\n   \n")?;
         let mut args = valid_args();
         args.allowed_keys_file = Some(file.path());
+        args.allow_all_selectors = false;
 
         let result = SelectorPolicy::from_args(&args);
 
@@ -1465,6 +1593,7 @@ mod tests {
         file.write("id:restricted\n")?;
         let mut args = valid_args();
         args.allowed_keys_file = Some(file.path());
+        args.allow_all_selectors = false;
 
         let policy = SelectorPolicy::from_args(&args)?;
         assert!(policy.allows("id:restricted"));
@@ -1493,6 +1622,7 @@ mod tests {
         file.write(&content)?;
         let mut args = valid_args();
         args.allowed_keys_file = Some(file.path());
+        args.allow_all_selectors = false;
 
         let Some(error) = SelectorPolicy::from_args(&args).err() else {
             unreachable!("oversized policy file must be rejected");
@@ -1507,6 +1637,7 @@ mod tests {
         file.write("id:only\n")?;
         let mut args = valid_args();
         args.allowed_keys_file = Some(file.path());
+        args.allow_all_selectors = false;
 
         let policy = SelectorPolicy::from_args(&args)?;
         let metrics = Arc::new(AppMetrics::new());
@@ -1525,6 +1656,7 @@ mod tests {
         file.write("id:initial\n")?;
         let mut args = valid_args();
         args.allowed_keys_file = Some(file.path());
+        args.allow_all_selectors = false;
 
         let policy = SelectorPolicy::from_args(&args)?;
         let lifecycle = Lifecycle::default();

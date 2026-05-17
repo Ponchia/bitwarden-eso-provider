@@ -14,6 +14,7 @@ pub mod keys;
 use async_trait::async_trait;
 use bweso_core::{require_non_empty, RemoteRef, SecretDocument, ValidationError};
 use secrecy::SecretString;
+use std::fmt;
 use thiserror::Error;
 use url::Url;
 
@@ -158,13 +159,22 @@ pub struct BitwardenAuth {
 }
 
 /// Source selector understood by the Bitwarden-compatible provider.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct BitwardenSelector {
-    /// Vault item key. Supports bare ID/name lookup, `id:<item-id>`, or
-    /// `name:<item-name>`.
+    /// Vault item key. Must use `id:<item-id>` or `name:<item-name>`.
     pub key: String,
     /// Optional item field to extract.
     pub property: Option<String>,
+}
+
+impl fmt::Debug for BitwardenSelector {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("BitwardenSelector")
+            .field("key", &"<redacted>")
+            .field("property", &self.property.as_ref().map(|_| "<redacted>"))
+            .finish()
+    }
 }
 
 impl TryFrom<RemoteRef> for BitwardenSelector {
