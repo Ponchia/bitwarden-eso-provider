@@ -903,6 +903,27 @@ mod tests {
         "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+Pw==";
     const WRAPPED_CIPHER_TEST_KEY: &str =
         "2.AAECAwQFBgcICQoLDA0ODw==|rjzJWhStJXa0gPxMK+QGHB11ccKE8Q8NPFwsxqnI2yjMiiEWnwgY5nr1JWhyD4A5Sk4zDqfAoY91Gkr2QBfYQW14lXNe3qb+pHOsLqJ2Qa0=|Jsse4qMpeoqJ6VzlA9ta9PXyWNBJGfyPgRxFo5RupbE=";
+    const TEST_CA_PEM: &str = "\
+-----BEGIN CERTIFICATE-----
+MIIDETCCAfmgAwIBAgIUSlo2f67ehKubY3NrE56UeO6UtEgwDQYJKoZIhvcNAQEL
+BQAwGDEWMBQGA1UEAwwNYndlc28tdGVzdC1jYTAeFw0yNjA1MTcxMjAyMzRaFw0y
+NjA1MTgxMjAyMzRaMBgxFjAUBgNVBAMMDWJ3ZXNvLXRlc3QtY2EwggEiMA0GCSqG
+SIb3DQEBAQUAA4IBDwAwggEKAoIBAQC9TjwVnieLgFTIsMdx9iM/wiE0792d3VHV
+u9/rC0d59O0yWHtlFAsRT4qKQgIVw2TaAp3IrkykmhPlxoX/gbWSsxTnpmBeVG2D
+y8FOmLnkb5u+mA238/BDYHvitxflQwSd4L/JNVi913nbYgTtmDqWGpWP643PlPXm
+NryDkHuzauJM0q5m7r+Lo1rTS/WXbuc4ArEYQvRowYEteehlo622pfGSJXPdKHaM
+Zgzol5l0xClWMeWskIaZOKlksPXAT1/n7hvBQQUr28+w+n/xXu/p4/89jEqRLx5w
+jSnahgc93orpO3UWRDibypg0MEVcOsAPCk9BGpZDZeKPCDFeNVORAgMBAAGjUzBR
+MB0GA1UdDgQWBBQhSR0/X5F8Xv6ctTjZIdciJxKOFDAfBgNVHSMEGDAWgBQhSR0/
+X5F8Xv6ctTjZIdciJxKOFDAPBgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUA
+A4IBAQCgEju0Nv7tdND/QBV/2P2kg3QTpuwTJp3Ik1IrlvNWSfp8RLIR0Dio6VLx
+tMvljLF7PI0x6rKUGSxHjrD+pFi8tJE7jQVUcKMsvylZWXBPot5t140ATOlDa3Ds
+GRhGSvWALmr7f4FRONCi/+mPoYLShQnlMjpsyQCFD/krnaflxEYT8jaaehio8XlF
+Ss8xqydle1hGxqAcjwm5U2+WNdWrgbgEN8lkMADBu4Sq8lG4RxFPehXsFqc1ETNc
+cUZqSvmpFg+x1PNHCg8Fh1WuysQRSoLFPW5szcmj+P3Q/v/L7PuEarqvluQzz4vf
+frW69DSxg6/fcNRyvdTH+twvVnzH
+-----END CERTIFICATE-----
+";
     const LOGIN_CIPHER_JSON: &str = r#"
 {
   "id": "cipher-login",
@@ -1013,6 +1034,18 @@ mod tests {
             "https://identity.bitwarden.com/connect/token"
         );
         assert_eq!(sync.as_str(), "https://api.bitwarden.com/sync");
+        Ok(())
+    }
+
+    #[test]
+    fn http_config_keeps_extra_root_certificates() -> TestResult {
+        let certificates = reqwest::Certificate::from_pem_bundle(TEST_CA_PEM.as_bytes())?;
+        let config = BitwardenHttpConfig::new(Duration::from_secs(1), Duration::from_secs(2))
+            .with_extra_root_certificates(certificates);
+
+        assert_eq!(config.extra_root_certificates.len(), 1);
+        assert_eq!(config.connect_timeout, Duration::from_secs(1));
+        assert_eq!(config.request_timeout, Duration::from_secs(2));
         Ok(())
     }
 

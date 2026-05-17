@@ -1,14 +1,17 @@
 # Release Verification
 
-Each tagged GitHub Release publishes a multi-arch image, an OCI Helm chart, a
-downloadable chart archive, generated release notes, and release evidence. Use
-the exact image digest, chart digest, and chart archive SHA256 from the release
-notes.
+Each tag produced by the current release workflow publishes a multi-arch image,
+an OCI Helm chart, a downloadable chart archive, generated release notes, and
+release evidence. Older tags may have fewer evidence artifacts; use the exact
+GitHub Release notes for the tag you install.
+
+Use the exact image digest, chart digest, and chart archive SHA256 from the
+release notes.
 
 Set the version and evidence values from the GitHub Release:
 
 ```bash
-VERSION=0.2.1
+VERSION="<published-version>"
 IMAGE="ghcr.io/ponchia/vaultwarden-eso-provider@sha256:<image-digest>"
 CHART_REF="oci://ghcr.io/ponchia/charts/vaultwarden-eso-provider"
 CHART_SHA256="<chart-archive-sha256>"

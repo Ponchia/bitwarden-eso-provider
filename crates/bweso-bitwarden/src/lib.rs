@@ -424,4 +424,19 @@ mod tests {
         assert_eq!(selector.property.as_deref(), Some("DATABASE_URL"));
         Ok(())
     }
+
+    #[test]
+    fn selector_debug_redacts_key_and_property() {
+        let selector = BitwardenSelector {
+            key: "id:secret-item".to_string(),
+            property: Some("DATABASE_URL".to_string()),
+        };
+
+        let output = format!("{selector:?}");
+
+        assert!(output.contains("BitwardenSelector"));
+        assert!(output.contains("<redacted>"));
+        assert!(!output.contains("secret-item"));
+        assert!(!output.contains("DATABASE_URL"));
+    }
 }

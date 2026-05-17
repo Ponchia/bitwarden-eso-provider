@@ -680,6 +680,18 @@ mod tests {
     }
 
     #[test]
+    fn failed_policy_reload_does_not_update_last_success_timestamp() {
+        let metrics = AppMetrics::new();
+        metrics.record_policy_reload("failure", 3, 1);
+
+        let output = metrics.render(true, None);
+
+        assert!(output.contains("bweso_policy_reloads_total{outcome=\"failure\"} 1"));
+        assert!(!output.contains("bweso_policy_last_reload_success_timestamp_seconds"));
+        assert!(!output.contains("bweso_policy_last_reload_success_age_seconds"));
+    }
+
+    #[test]
     fn policy_metrics_absent_until_first_reload() {
         let metrics = AppMetrics::new();
         let output = metrics.render(true, None);

@@ -48,10 +48,13 @@ Protect `main` with these rules:
   - `Docker`
   - `CodeQL Rust`
   - `CodeQL Actions`
-  - `OpenSSF Scorecard`
 - Include administrators.
 - Block force pushes.
 - Block deletions.
+
+`OpenSSF Scorecard` runs on `main`, schedule, and manual dispatch and uploads
+SARIF as post-merge security evidence. Do not make it a required PR check unless
+the workflow is changed to report on pull-request commits.
 
 For a solo-maintainer repository, do not require CODEOWNERS approval or one
 approving review yet; self-authored maintenance PRs and Dependabot patch PRs

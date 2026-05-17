@@ -213,10 +213,11 @@ the `SecretStore` does not need JSONPath templating for field names. See
 [`../../deploy/eso`](../../deploy/eso) for Secret type, Reloader,
 `ClusterSecretStore`, and NetworkPolicy examples.
 
-For production installs, pin and verify release artifacts before rollout. The
-GitHub Release notes include the image digest, chart digest, chart archive
-checksum, Sigstore signing evidence, and GitHub artifact-attestation evidence;
-see [`../release-verification.md`](../release-verification.md).
+For production installs, pin and verify release artifacts before rollout.
+Releases produced by the current release workflow include the image digest,
+chart digest, chart archive checksum, Sigstore signing evidence, and GitHub
+artifact-attestation evidence in the GitHub Release notes. Older tags may have
+less evidence; see [`../release-verification.md`](../release-verification.md).
 
 Whole-item `dataFrom.extract` uses a separate webhook `SecretStore` shape with
 `result.jsonPath: "$.data"` and a request body that omits

@@ -207,10 +207,12 @@ checksum verification and environments that do not pull Helm charts from OCI:
 CHART_ARCHIVE_URL="https://github.com/ponchia/vaultwarden-eso-provider/releases/download/v${CHART_VERSION}/vaultwarden-eso-provider-${CHART_VERSION}.tgz"
 ```
 
-Release notes include the image digest, chart digest, chart archive SHA256,
-Sigstore signing evidence, and GitHub artifact-attestation evidence. See
-[`docs/release-verification.md`](docs/release-verification.md) before pinning a
-production install.
+For releases produced by the current release workflow, release notes include
+the image digest, chart digest, chart archive SHA256, Sigstore signing evidence,
+and GitHub artifact-attestation evidence. Older tags may have less evidence;
+use the notes on that exact GitHub Release as the source of truth. See
+[`docs/release-verification.md`](docs/release-verification.md) before pinning
+a production install.
 
 For unreleased `main` builds, clone the repository, replace `"${CHART_REF}"`
 with `./deploy/helm/vaultwarden-eso-provider`, and omit `--version`.

@@ -87,7 +87,11 @@ impl LiveConfig {
                 identity_url,
                 api_url,
             },
-            (None, None, None) => return Ok(None),
+            (None, None, None) => {
+                return Err(config_error(
+                    "BWESO_TEST_LIVE=true requires BWESO_TEST_SINGLE_ORIGIN_URL or both BWESO_TEST_IDENTITY_URL and BWESO_TEST_API_URL",
+                ));
+            }
             _ => {
                 return Err(config_error(
                     "live test endpoint config must use BWESO_TEST_SINGLE_ORIGIN_URL or both BWESO_TEST_IDENTITY_URL and BWESO_TEST_API_URL",
@@ -95,15 +99,9 @@ impl LiveConfig {
             }
         };
 
-        let Some(client_id) = optional_env("BWESO_TEST_CLIENT_ID") else {
-            return Ok(None);
-        };
-        let Some(client_secret) = optional_env("BWESO_TEST_CLIENT_SECRET") else {
-            return Ok(None);
-        };
-        let Some(master_password) = optional_env("BWESO_TEST_MASTER_PASSWORD") else {
-            return Ok(None);
-        };
+        let client_id = required_env("BWESO_TEST_CLIENT_ID")?;
+        let client_secret = required_env("BWESO_TEST_CLIENT_SECRET")?;
+        let master_password = required_env("BWESO_TEST_MASTER_PASSWORD")?;
         let property = optional_env("BWESO_TEST_PROPERTY");
         let selector = match (
             optional_env("BWESO_TEST_ITEM_KEY"),
@@ -111,7 +109,11 @@ impl LiveConfig {
         ) {
             (Some(key), _) => LiveSelectorConfig::Explicit { key, property },
             (None, true) => LiveSelectorConfig::FirstExtractable { property },
-            (None, false) => return Ok(None),
+            (None, false) => {
+                return Err(config_error(
+                    "BWESO_TEST_LIVE=true requires BWESO_TEST_ITEM_KEY or BWESO_TEST_ALLOW_ANY_ITEM=true",
+                ));
+            }
         };
 
         Ok(Some(Self {
@@ -215,8 +217,8 @@ impl LiveEndpointConfig {
     }
 }
 
-fn config_error(message: &'static str) -> Box<dyn std::error::Error> {
-    std::io::Error::new(std::io::ErrorKind::InvalidInput, message).into()
+fn config_error(message: impl Into<String>) -> Box<dyn std::error::Error> {
+    std::io::Error::new(std::io::ErrorKind::InvalidInput, message.into()).into()
 }
 
 fn dynamic_test_error(message: String) -> Box<dyn std::error::Error> {
@@ -237,4 +239,8 @@ fn optional_env(name: &str) -> Option<String> {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
+}
+
+fn required_env(name: &'static str) -> Result<String, Box<dyn std::error::Error>> {
+    optional_env(name).ok_or_else(|| config_error(format!("BWESO_TEST_LIVE=true requires {name}")))
 }

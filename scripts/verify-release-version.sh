@@ -17,6 +17,19 @@ app_version="$(
   awk -F': *' '$1 == "appVersion" { gsub(/"/, "", $2); print $2; exit }' "${chart_file}"
 )"
 
+package_version() {
+  local manifest="$1"
+  awk -F'= *' '
+    /^\[package\]/ { in_package = 1; next }
+    /^\[/ { in_package = 0 }
+    in_package && $1 ~ /^version[[:space:]]*$/ {
+      gsub(/[ "]/, "", $2)
+      print $2
+      exit
+    }
+  ' "${manifest}"
+}
+
 if [[ "${chart_version}" != "${version}" ]]; then
   echo "Chart.yaml version ${chart_version} does not match tag ${tag}" >&2
   exit 1
@@ -32,27 +45,15 @@ if ! grep -Eq "^## v?${version}([[:space:]-]|$)" CHANGELOG.md; then
   exit 1
 fi
 
-python3 - "${version}" <<'PY'
-import pathlib
-import sys
-import tomllib
-
-expected = sys.argv[1]
-paths = [
-    pathlib.Path("crates/bweso-core/Cargo.toml"),
-    pathlib.Path("crates/bweso-bitwarden/Cargo.toml"),
-    pathlib.Path("crates/vaultwarden-eso-provider/Cargo.toml"),
-]
-
-errors = []
-for path in paths:
-    actual = tomllib.loads(path.read_text())["package"]["version"]
-    if actual != expected:
-        errors.append(f"{path}: package.version {actual} != {expected}")
-
-if errors:
-    print("\n".join(errors), file=sys.stderr)
-    sys.exit(1)
-PY
+for manifest in \
+  crates/bweso-core/Cargo.toml \
+  crates/bweso-bitwarden/Cargo.toml \
+  crates/vaultwarden-eso-provider/Cargo.toml; do
+  actual="$(package_version "${manifest}")"
+  if [[ "${actual}" != "${version}" ]]; then
+    echo "${manifest}: package.version ${actual} != ${version}" >&2
+    exit 1
+  fi
+done
 
 echo "release version gate passed for ${tag}"

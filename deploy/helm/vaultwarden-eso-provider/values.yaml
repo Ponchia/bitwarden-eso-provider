@@ -105,8 +105,11 @@ credentials:
     name: ""
     keys:
       clientId: client-id
+      # checkov:skip=CKV_SECRET_6:example Kubernetes Secret key name, not a secret value
       clientSecret: client-secret
+      # checkov:skip=CKV_SECRET_6:example Kubernetes Secret key name, not a secret value
       masterPassword: master-password
+      # checkov:skip=CKV_SECRET_6:example Kubernetes Secret key name, not a secret value
       webhookToken: webhook-token
   # create is useful for local smoke tests. For real installs, prefer an
   # existing Secret because values supplied here can be retained in Helm

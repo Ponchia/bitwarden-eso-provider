@@ -75,6 +75,9 @@ jobs:
           --set-string 'hostAliases[0].ip=10.43.186.117'
           --set-string 'hostAliases[0].hostnames[0]=vaultwarden.example.com'
 
+      - name: Validate selector-policy Helm contracts
+        run: bash scripts/helm-policy-contracts.sh
+
       - name: Validate documentation
         run: npx --yes markdownlint-cli2@0.22.1 '**/*.md'
 

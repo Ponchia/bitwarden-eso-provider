@@ -10,8 +10,11 @@ before release so generated notes land in the right category.
 
 ## Unreleased
 
-- Hardened selector-policy defaults so public installs must configure an
+- Breaking: hardened selector-policy defaults so installs must configure an
   allowlist or explicitly opt in to allow-all behavior.
+- Breaking: when `networkPolicy.enabled=true`, the default empty ingress and
+  egress rule lists are deny-all until operators provide cluster-specific
+  rules.
 - Added custom CA bundle validation, safer redacted debug output, and
   additional zeroization for plaintext/decrypted buffers.
 - Tightened Helm NetworkPolicy defaults and added release evidence,

@@ -182,13 +182,7 @@ async fn main() -> anyhow::Result<()> {
     let listen = args.listen;
     let lifecycle = Lifecycle::default();
 
-    let resolve_semaphore = if args.resolve_concurrency_limit > 0 {
-        Some(Arc::new(tokio::sync::Semaphore::new(
-            args.resolve_concurrency_limit as usize,
-        )))
-    } else {
-        None
-    };
+    let resolve_semaphore = resolve_semaphore(args.resolve_concurrency_limit);
     let state = AppState {
         provider: provider_from_args(&args)?,
         selector_policy: SelectorPolicy::from_args(&args)?,
@@ -203,10 +197,10 @@ async fn main() -> anyhow::Result<()> {
     // is observable from t0 — including reloadIntervalSeconds:0 (no task) and
     // the warm-up window before the first reload tick.
     if state.selector_policy.sources.has_file() {
-        let rules = state.selector_policy.snapshot();
+        let (active_keys, active_key_prefixes) = state.selector_policy.snapshot().counts();
         state
             .metrics
-            .record_policy_baseline(rules.allowed_keys.len(), rules.allowed_key_prefixes.len());
+            .record_policy_baseline(active_keys, active_key_prefixes);
     }
 
     // The task observes shutdown via Lifecycle and is reaped on runtime drop;
@@ -230,31 +224,49 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Immutable evaluated allow-list. An empty rule set allows every selector only
-/// after the operator explicitly opts in with `BWESO_ALLOW_ALL_SELECTORS=true`.
-/// [`SelectorPolicy::from_args`] rejects an unconfigured policy otherwise, and
-/// [`PolicySources::evaluate`] rejects an empty result whenever a file source is
-/// configured, so an emptied/comment-only `ConfigMap` cannot silently widen
-/// access to every item.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-struct PolicyRules {
-    allowed_keys: Vec<String>,
-    allowed_key_prefixes: Vec<String>,
+fn resolve_semaphore(limit: u32) -> Option<Arc<tokio::sync::Semaphore>> {
+    if limit > 0 {
+        Some(Arc::new(tokio::sync::Semaphore::new(limit as usize)))
+    } else {
+        None
+    }
+}
+
+/// Immutable evaluated selector policy. Allow-all is an explicit variant, so
+/// an empty allow-list cannot accidentally widen access to every item.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum PolicyRules {
+    AllowAll,
+    AllowList {
+        allowed_keys: Vec<String>,
+        allowed_key_prefixes: Vec<String>,
+    },
 }
 
 impl PolicyRules {
     fn allows(&self, key: &str) -> bool {
-        if self.allowed_keys.is_empty() && self.allowed_key_prefixes.is_empty() {
-            return true;
+        match self {
+            Self::AllowAll => true,
+            Self::AllowList {
+                allowed_keys,
+                allowed_key_prefixes,
+            } => {
+                allowed_keys.iter().any(|allowed_key| allowed_key == key)
+                    || allowed_key_prefixes
+                        .iter()
+                        .any(|prefix| key.starts_with(prefix))
+            }
         }
+    }
 
-        self.allowed_keys
-            .iter()
-            .any(|allowed_key| allowed_key == key)
-            || self
-                .allowed_key_prefixes
-                .iter()
-                .any(|prefix| key.starts_with(prefix))
+    fn counts(&self) -> (usize, usize) {
+        match self {
+            Self::AllowAll => (0, 0),
+            Self::AllowList {
+                allowed_keys,
+                allowed_key_prefixes,
+            } => (allowed_keys.len(), allowed_key_prefixes.len()),
+        }
     }
 }
 
@@ -286,20 +298,17 @@ impl PolicySources {
             allowed_key_prefixes.extend(read_policy_file(path, "allowed_key_prefix")?);
         }
 
-        // A file source is an explicit intent to run an allow-list. If it
-        // evaluates to zero entries (empty, comment-only, or accidentally
-        // emptied by a bad GitOps render), DO NOT treat it as explicit
-        // allow-all — that would silently widen access to every item visible to
-        // the provider account on the no-restart hot path. Erroring here makes
-        // startup fail fast and makes a reload keep the last known-good policy.
         if self.has_file() && allowed_keys.is_empty() && allowed_key_prefixes.is_empty() {
             bail!(
                 "selector policy file source is configured but evaluated to zero entries; \
                  refusing to fall back to allow-all"
             );
         }
+        if allowed_keys.is_empty() && allowed_key_prefixes.is_empty() {
+            bail!("selector policy allow-list evaluated to zero entries");
+        }
 
-        Ok(PolicyRules {
+        Ok(PolicyRules::AllowList {
             allowed_keys,
             allowed_key_prefixes,
         })
@@ -314,12 +323,6 @@ impl PolicySources {
 struct SelectorPolicy {
     rules: Arc<std::sync::RwLock<Arc<PolicyRules>>>,
     sources: Arc<PolicySources>,
-}
-
-impl Default for SelectorPolicy {
-    fn default() -> Self {
-        Self::from_rules(PolicyRules::default(), PolicySources::default())
-    }
 }
 
 impl SelectorPolicy {
@@ -355,7 +358,11 @@ impl SelectorPolicy {
             key_prefixes_file: args.allowed_key_prefixes_file.clone(),
         };
         // Fail fast at startup if a configured file is unreadable or invalid.
-        let rules = sources.evaluate()?;
+        let rules = if args.allow_all_selectors {
+            PolicyRules::AllowAll
+        } else {
+            sources.evaluate()?
+        };
         Ok(Self::from_rules(rules, sources))
     }
 
@@ -377,6 +384,9 @@ impl SelectorPolicy {
     /// Re-evaluate the sources and swap the active rules in place. Returns
     /// whether the effective policy changed. Never logs selector keys.
     fn reload(&self) -> anyhow::Result<bool> {
+        if !self.sources.has_file() {
+            return Ok(false);
+        }
         let next = self.sources.evaluate()?;
         let current = self.snapshot();
         if *current == next {
@@ -495,10 +505,11 @@ fn spawn_policy_reload(
             let outcome = match policy.reload() {
                 Ok(true) => {
                     let rules = policy.snapshot();
+                    let (active_keys, active_key_prefixes) = rules.counts();
                     // Counts only — never log selector keys or prefixes.
                     tracing::info!(
-                        allowed_keys = rules.allowed_keys.len(),
-                        allowed_key_prefixes = rules.allowed_key_prefixes.len(),
+                        allowed_keys = active_keys,
+                        allowed_key_prefixes = active_key_prefixes,
                         "selector policy reloaded"
                     );
                     "success"
@@ -513,12 +524,8 @@ fn spawn_policy_reload(
             };
             // Active counts reflect the currently-served policy (last-good on
             // failure). Counts only — never the selector keys themselves.
-            let active = policy.snapshot();
-            metrics.record_policy_reload(
-                outcome,
-                active.allowed_keys.len(),
-                active.allowed_key_prefixes.len(),
-            );
+            let (active_keys, active_key_prefixes) = policy.snapshot().counts();
+            metrics.record_policy_reload(outcome, active_keys, active_key_prefixes);
         }
     }))
 }
@@ -1143,7 +1150,7 @@ mod tests {
     fn test_state(provider: Arc<dyn BitwardenProvider>) -> AppState {
         AppState {
             provider,
-            selector_policy: SelectorPolicy::default(),
+            selector_policy: test_allow_all_selector_policy(),
             auth: WebhookAuth::DisabledInsecure,
             metrics: Arc::new(AppMetrics::new()),
             lifecycle: Lifecycle::default(),
@@ -1154,12 +1161,16 @@ mod tests {
     fn test_state_with_auth(provider: Arc<dyn BitwardenProvider>, token: &str) -> AppState {
         AppState {
             provider,
-            selector_policy: SelectorPolicy::default(),
+            selector_policy: test_allow_all_selector_policy(),
             auth: WebhookAuth::Required(Arc::new(token.to_string().into())),
             metrics: Arc::new(AppMetrics::new()),
             lifecycle: Lifecycle::default(),
             resolve_semaphore: Some(Arc::new(tokio::sync::Semaphore::new(16))),
         }
+    }
+
+    fn test_allow_all_selector_policy() -> SelectorPolicy {
+        SelectorPolicy::from_rules(PolicyRules::AllowAll, PolicySources::default())
     }
 
     fn valid_args() -> Args {
@@ -1193,6 +1204,33 @@ mod tests {
             insecure_allow_unauthenticated: false,
             healthcheck_url: None,
         }
+    }
+
+    #[test]
+    fn security_related_size_limits_stay_at_documented_values() {
+        assert_eq!(RESOLVE_BODY_LIMIT_BYTES, 16 * 1024);
+        assert_eq!(MAX_POLICY_FILE_BYTES, 4 * 1024 * 1024);
+    }
+
+    #[test]
+    fn resolve_semaphore_zero_disables_the_cap() {
+        assert!(resolve_semaphore(0).is_none());
+        let Some(semaphore) = resolve_semaphore(3) else {
+            unreachable!("positive limit should create a semaphore");
+        };
+        assert_eq!(semaphore.available_permits(), 3);
+    }
+
+    #[test]
+    fn args_zeroize_sensitive_clears_runtime_secret_fields() {
+        let mut args = valid_args();
+
+        args.zeroize_sensitive();
+
+        assert!(args.client_id.is_none());
+        assert!(args.client_secret.is_none());
+        assert!(args.master_password.is_none());
+        assert!(args.webhook_auth_token.is_none());
     }
 
     #[test]
@@ -1370,6 +1408,17 @@ mod tests {
         assert!(!policy.allows("id:item-b"));
         assert!(!policy.allows("name:item-a"));
         Ok(())
+    }
+
+    #[test]
+    fn policy_rules_counts_active_allow_list_entries() {
+        let allow_list = PolicyRules::AllowList {
+            allowed_keys: vec!["id:item-a".to_string(), "id:item-b".to_string()],
+            allowed_key_prefixes: vec!["id:team-a/".to_string()],
+        };
+
+        assert_eq!(allow_list.counts(), (2, 1));
+        assert_eq!(PolicyRules::AllowAll.counts(), (0, 0));
     }
 
     #[test]
@@ -1567,6 +1616,16 @@ frW69DSxg6/fcNRyvdTH+twvVnzH
     }
 
     #[test]
+    fn policy_reload_not_spawned_without_file_source() -> TestResult {
+        let policy = SelectorPolicy::from_args(&valid_args())?;
+        let metrics = Arc::new(AppMetrics::new());
+        let handle = spawn_policy_reload(policy, Lifecycle::default(), metrics, 30);
+
+        assert!(handle.is_none());
+        Ok(())
+    }
+
+    #[test]
     fn selector_policy_from_args_fails_when_configured_file_is_empty() -> TestResult {
         let file = TempPolicyFile::new("empty");
         // Comment- and blank-only: a configured allow-list that evaluates to
@@ -1632,6 +1691,20 @@ frW69DSxg6/fcNRyvdTH+twvVnzH
     }
 
     #[test]
+    fn selector_policy_accepts_file_at_exact_size_limit() -> TestResult {
+        let file = TempPolicyFile::new("exact-size");
+        let mut content = String::from("id:ok\n");
+        let target_len = 4 * 1024 * 1024;
+        content.push_str(&"#".repeat(target_len - content.len()));
+        file.write(&content)?;
+
+        let entries = read_policy_file(&file.path(), "allowed_key")?;
+
+        assert_eq!(entries, vec!["id:ok".to_string()]);
+        Ok(())
+    }
+
+    #[test]
     fn policy_reload_disabled_when_interval_zero() -> TestResult {
         let file = TempPolicyFile::new("interval0");
         file.write("id:only\n")?;
@@ -1675,6 +1748,42 @@ frW69DSxg6/fcNRyvdTH+twvVnzH
         };
         join_result?;
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn policy_reload_task_picks_up_changes_while_ready() -> TestResult {
+        let file = TempPolicyFile::new("task-reload");
+        file.write("id:initial\n")?;
+        let mut args = valid_args();
+        args.allowed_keys_file = Some(file.path());
+        args.allow_all_selectors = false;
+
+        let policy = SelectorPolicy::from_args(&args)?;
+        let lifecycle = Lifecycle::default();
+        let metrics = Arc::new(AppMetrics::new());
+        let Some(handle) = spawn_policy_reload(policy.clone(), lifecycle.clone(), metrics, 1)
+        else {
+            unreachable!("a file source is configured, so a task must spawn");
+        };
+
+        file.write("id:updated\n")?;
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < deadline {
+            if policy.allows("id:updated") {
+                lifecycle.mark_shutting_down();
+                let joined = tokio::time::timeout(Duration::from_secs(2), handle).await;
+                let Ok(join_result) = joined else {
+                    unreachable!("reload task did not exit promptly after test shutdown");
+                };
+                join_result?;
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+
+        lifecycle.mark_shutting_down();
+        handle.abort();
+        unreachable!("policy reload task did not pick up file changes while ready");
     }
 
     #[test]
@@ -1775,16 +1884,36 @@ frW69DSxg6/fcNRyvdTH+twvVnzH
             stream.set_read_timeout(Some(Duration::from_secs(2)))?;
             stream.set_write_timeout(Some(Duration::from_secs(2)))?;
             let mut request = [0_u8; 512];
-            let _ = stream.read(&mut request)?;
+            let len = stream.read(&mut request)?;
+            let request = std::str::from_utf8(&request[..len])
+                .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+            if !request.starts_with("GET /livez?ready=1 HTTP/1.1\r\n") {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("unexpected healthcheck request: {request:?}"),
+                ));
+            }
             stream.write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")?;
             Ok(())
         });
 
-        run_healthcheck(&format!("http://{address}/livez"))?;
+        run_healthcheck(&format!("http://{address}/livez?ready=1"))?;
         handle
             .join()
             .map_err(|_| "healthcheck test server panicked")??;
         Ok(())
+    }
+
+    #[test]
+    fn healthcheck_rejects_non_successful_http_response() {
+        let Some(error) =
+            ensure_successful_healthcheck_response("HTTP/1.1 503 Service Unavailable\r\n\r\n")
+                .err()
+        else {
+            unreachable!("non-2xx healthcheck response should fail");
+        };
+
+        assert!(error.to_string().contains("non-success status"));
     }
 
     #[test]
@@ -2139,7 +2268,7 @@ frW69DSxg6/fcNRyvdTH+twvVnzH
     async fn resolve_rejects_selector_denied_by_policy_without_leaking_key() -> TestResult {
         let mut state = test_state(Arc::new(StaticProvider));
         state.selector_policy = SelectorPolicy::from_rules(
-            PolicyRules {
+            PolicyRules::AllowList {
                 allowed_keys: vec!["id:allowed".to_string()],
                 allowed_key_prefixes: Vec::new(),
             },

@@ -110,6 +110,40 @@ mod tests {
     }
 
     #[test]
+    fn remote_ref_debug_redacts_selector_values() {
+        let remote_ref = RemoteRef {
+            key: "id:secret-item".to_string(),
+            property: Some("DATABASE_URL".to_string()),
+            version: Some("42".to_string()),
+        };
+
+        let output = format!("{remote_ref:?}");
+
+        assert!(output.contains("RemoteRef"));
+        assert!(output.contains("<redacted>"));
+        assert!(output.contains("<present>"));
+        assert!(!output.contains("secret-item"));
+        assert!(!output.contains("DATABASE_URL"));
+        assert!(!output.contains("42"));
+    }
+
+    #[test]
+    fn secret_document_debug_reports_counts_without_values() {
+        let mut doc = SecretDocument::single("DATABASE_URL", "postgres://example");
+        doc.metadata
+            .insert("item_name".to_string(), "app/database".to_string());
+
+        let output = format!("{doc:?}");
+
+        assert!(output.contains("SecretDocument"));
+        assert!(output.contains("data_keys"));
+        assert!(output.contains("metadata_keys"));
+        assert!(!output.contains("DATABASE_URL"));
+        assert!(!output.contains("postgres://example"));
+        assert!(!output.contains("app/database"));
+    }
+
+    #[test]
     fn non_empty_validation_rejects_blank_values() {
         let Err(err) = require_non_empty("  ", "key") else {
             unreachable!("blank value should fail validation");

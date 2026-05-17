@@ -1,8 +1,8 @@
 # Release Readiness Plan
 
 This file records the release-readiness decisions for Vaultwarden ESO Provider.
-`v0.2.1` is public, so this document now describes the current baseline and the
-rules for future releases.
+`v0.2.1` is public, so this document separates the current published baseline
+from the rules and automation for future releases.
 
 ## Product Shape
 
@@ -62,7 +62,7 @@ roadmap items.
 
 ## Current Validation Baseline
 
-The public `v0.2.1` baseline has been validated with:
+The repository baseline is validated with:
 
 - CI gates for formatting, clippy, tests with coverage, Helm rendering,
   markdown linting, observability examples, Gitleaks, Trivy filesystem scanning,
@@ -78,9 +78,11 @@ The public `v0.2.1` baseline has been validated with:
 - `scripts/live-eso-smoke.sh` against Bitwarden Cloud with selector policy
   enabled for the `v0.1.1` runtime path; releases without provider protocol
   changes may reuse that evidence.
-- A tagged GitHub Release that publishes a multi-arch image, a GHCR OCI Helm
+- The current release workflow publishes a multi-arch image, a GHCR OCI Helm
   chart, a packaged Helm chart archive, generated release notes, keyless
   Sigstore signatures, and GitHub artifact attestations from the release commit.
+  Do not assume older tags have every evidence artifact unless the exact GitHub
+  Release notes list it.
 - Public repository controls for branch protection, tag protection, secret
   scanning, Dependabot alerts, security policy, issue templates, and CODEOWNERS.
 

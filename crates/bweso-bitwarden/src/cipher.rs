@@ -610,6 +610,133 @@ mod tests {
     }
 
     #[test]
+    fn encrypted_cipher_debug_redacts_source_values() {
+        let cipher = EncryptedCipher {
+            id: "cipher-id-secret".to_string(),
+            cipher_type: 1,
+            organization_id: Some("organization-id-secret".to_string()),
+            key: Some("cipher-key-secret".to_string()),
+            name: Some("encrypted-name-secret".to_string()),
+            notes: Some("encrypted-notes-secret".to_string()),
+            fields: vec![EncryptedField {
+                name: Some("encrypted-field-name-secret".to_string()),
+                value: Some("encrypted-field-value-secret".to_string()),
+                field_type: Some(1),
+            }],
+            login: Some(EncryptedLogin {
+                username: Some("encrypted-username-secret".to_string()),
+                password: Some("encrypted-password-secret".to_string()),
+                totp: Some("encrypted-totp-secret".to_string()),
+            }),
+            ssh_key: Some(EncryptedSshKey {
+                private_key: Some("encrypted-private-key-secret".to_string()),
+                public_key: Some("encrypted-public-key-secret".to_string()),
+                key_fingerprint: Some("encrypted-fingerprint-secret".to_string()),
+            }),
+        };
+
+        let output = format!("{cipher:?}");
+
+        assert!(output.contains("EncryptedCipher"));
+        assert!(output.contains("<redacted>"));
+        assert!(output.contains("<present>"));
+        for secret in [
+            "cipher-id-secret",
+            "organization-id-secret",
+            "cipher-key-secret",
+            "encrypted-name-secret",
+            "encrypted-notes-secret",
+            "encrypted-field-name-secret",
+            "encrypted-field-value-secret",
+            "encrypted-username-secret",
+            "encrypted-password-secret",
+            "encrypted-totp-secret",
+            "encrypted-private-key-secret",
+            "encrypted-public-key-secret",
+            "encrypted-fingerprint-secret",
+        ] {
+            assert!(!output.contains(secret), "debug leaked {secret}: {output}");
+        }
+    }
+
+    #[test]
+    fn decrypted_cipher_debug_redacts_secret_values() {
+        let cipher = DecryptedCipher {
+            id: "cipher-id-secret".to_string(),
+            cipher_type: 1,
+            organization_id: Some("organization-id-secret".to_string()),
+            name: Some("item-name-secret".to_string()),
+            notes: Some("notes-secret".to_string()),
+            fields: vec![DecryptedField {
+                name: Some("field-name-secret".to_string()),
+                value: Some("field-value-secret".to_string()),
+                field_type: Some(1),
+            }],
+            login: Some(DecryptedLogin {
+                username: Some("username-secret".to_string()),
+                password: Some("password-secret".to_string()),
+                totp: Some("totp-secret".to_string()),
+            }),
+            ssh_key: Some(DecryptedSshKey {
+                private_key: Some("private-key-secret".to_string()),
+                public_key: Some("public-key-secret".to_string()),
+                key_fingerprint: Some("fingerprint-secret".to_string()),
+            }),
+        };
+        let field = cipher.fields[0].clone();
+        let Some(login) = cipher.login.clone() else {
+            unreachable!("fixture has login");
+        };
+        let Some(ssh_key) = cipher.ssh_key.clone() else {
+            unreachable!("fixture has SSH key");
+        };
+
+        let outputs = [
+            format!("{cipher:?}"),
+            format!("{field:?}"),
+            format!("{login:?}"),
+            format!("{ssh_key:?}"),
+        ];
+
+        assert!(outputs[0].contains("DecryptedCipher"));
+        assert!(outputs[1].contains("DecryptedField"));
+        assert!(outputs[2].contains("DecryptedLogin"));
+        assert!(outputs[3].contains("DecryptedSshKey"));
+        for output in outputs {
+            assert!(output.contains("<redacted>") || output.contains("<present>"));
+            for secret in [
+                "cipher-id-secret",
+                "organization-id-secret",
+                "item-name-secret",
+                "notes-secret",
+                "field-name-secret",
+                "field-value-secret",
+                "username-secret",
+                "password-secret",
+                "totp-secret",
+                "private-key-secret",
+                "public-key-secret",
+                "fingerprint-secret",
+            ] {
+                assert!(!output.contains(secret), "debug leaked {secret}: {output}");
+            }
+        }
+    }
+
+    #[test]
+    fn cipher_error_debug_does_not_include_selector_values() {
+        let missing_property = CipherError::MissingProperty {
+            property: "DATABASE_URL".to_string(),
+        };
+        let no_extractable_fields = CipherError::NoExtractableFields {
+            id: "cipher-id-secret".to_string(),
+        };
+
+        assert_eq!(format!("{missing_property:?}"), "MissingProperty");
+        assert_eq!(format!("{no_extractable_fields:?}"), "NoExtractableFields");
+    }
+
+    #[test]
     fn field_prefix_selects_custom_fields_that_collide_with_login_names(
     ) -> Result<(), Box<dyn std::error::Error>> {
         let decrypted = DecryptedCipher {
