@@ -192,7 +192,9 @@ async fn main() -> anyhow::Result<()> {
         resolve_semaphore,
     };
 
-    spawn_policy_reload(
+    // The task observes shutdown via Lifecycle and is reaped on runtime drop;
+    // no handle to retain here.
+    let _ = spawn_policy_reload(
         state.selector_policy.clone(),
         lifecycle.clone(),
         args.policy_reload_interval_seconds,
@@ -210,8 +212,12 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Immutable evaluated allow-list. An empty rule set allows every selector
-/// (preserving the original "unconfigured means allow all" behavior).
+/// Immutable evaluated allow-list. An empty rule set allows every selector,
+/// preserving the original "nothing configured means allow all" behavior.
+/// This allow-all-on-empty is only ever reached when NO policy source is
+/// configured: [`PolicySources::evaluate`] rejects an empty result whenever a
+/// file source is configured, so an emptied/comment-only `ConfigMap` cannot
+/// silently widen access to every item.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 struct PolicyRules {
     allowed_keys: Vec<String>,
@@ -260,6 +266,20 @@ impl PolicySources {
         let mut allowed_key_prefixes = self.inline_key_prefixes.clone();
         if let Some(path) = &self.key_prefixes_file {
             allowed_key_prefixes.extend(read_policy_file(path, "allowed_key_prefix")?);
+        }
+
+        // A file source is an explicit intent to run an allow-list. If it
+        // evaluates to zero entries (empty, comment-only, or accidentally
+        // emptied by a bad GitOps render), DO NOT fall back to the
+        // "empty == allow all" legacy behavior — that would silently widen
+        // access to every item visible to the provider account, on the
+        // no-restart hot path. Erroring here makes startup fail fast and makes
+        // a reload keep the last known-good policy (fail to last-good).
+        if self.has_file() && allowed_keys.is_empty() && allowed_key_prefixes.is_empty() {
+            bail!(
+                "selector policy file source is configured but evaluated to zero entries; \
+                 refusing to fall back to allow-all"
+            );
         }
 
         Ok(PolicyRules {
@@ -378,26 +398,36 @@ fn read_policy_file(path: &Path, name: &'static str) -> anyhow::Result<Vec<Strin
 }
 
 /// Spawn the background task that periodically re-reads file-backed policy
-/// sources and hot-swaps the active rules. No-op (and no task) when no policy
-/// file is configured or the interval is `0`; in those cases the policy stays
-/// exactly as evaluated at startup.
-fn spawn_policy_reload(policy: SelectorPolicy, lifecycle: Lifecycle, interval_seconds: u64) {
+/// sources and hot-swaps the active rules. Returns `None` (and spawns no task)
+/// when no policy file is configured or the interval is `0`; in those cases the
+/// policy stays exactly as evaluated at startup. The task exits promptly on
+/// shutdown via [`Lifecycle::shutdown_requested`], not only on its next tick.
+fn spawn_policy_reload(
+    policy: SelectorPolicy,
+    lifecycle: Lifecycle,
+    interval_seconds: u64,
+) -> Option<tokio::task::JoinHandle<()>> {
     if !policy.sources.has_file() {
-        return;
+        return None;
     }
     if interval_seconds == 0 {
         tracing::info!("policy file reload disabled (interval 0); policy is fixed at startup");
-        return;
+        return None;
     }
 
-    tokio::spawn(async move {
+    Some(tokio::spawn(async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(interval_seconds));
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         // First tick fires immediately; the startup evaluation already loaded
         // the files, so skip it and wait one interval before re-reading.
         ticker.tick().await;
         loop {
-            ticker.tick().await;
+            tokio::select! {
+                _ = ticker.tick() => {}
+                () = lifecycle.shutdown_requested() => break,
+            }
+            // Covers the rare case where the tick and shutdown race and the
+            // tick wins the select.
             if !lifecycle.is_ready() {
                 break;
             }
@@ -419,7 +449,7 @@ fn spawn_policy_reload(policy: SelectorPolicy, lifecycle: Lifecycle, interval_se
                 }
             }
         }
-    });
+    }))
 }
 
 fn run_healthcheck(raw_url: &str) -> anyhow::Result<()> {
@@ -1350,6 +1380,79 @@ mod tests {
     fn selector_policy_has_no_file_when_unconfigured() -> TestResult {
         let policy = SelectorPolicy::from_args(&valid_args())?;
         assert!(!policy.sources.has_file());
+        Ok(())
+    }
+
+    #[test]
+    fn selector_policy_from_args_fails_when_configured_file_is_empty() -> TestResult {
+        let path = temp_policy_path("empty");
+        // Comment- and blank-only: a configured allow-list that evaluates to
+        // zero entries must NOT fall back to allow-all.
+        fs::write(&path, "# only comments\n\n   \n")?;
+        let mut args = valid_args();
+        args.allowed_keys_file = Some(path.clone());
+
+        let result = SelectorPolicy::from_args(&args);
+        fs::remove_file(&path).ok();
+
+        let Some(error) = result.err() else {
+            unreachable!("configured-empty policy file must fail fast at startup");
+        };
+        assert!(error
+            .to_string()
+            .contains("refusing to fall back to allow-all"));
+        Ok(())
+    }
+
+    #[test]
+    fn selector_policy_reload_rejects_emptying_a_file() -> TestResult {
+        let path = temp_policy_path("emptied");
+        fs::write(&path, "id:restricted\n")?;
+        let mut args = valid_args();
+        args.allowed_keys_file = Some(path.clone());
+
+        let policy = SelectorPolicy::from_args(&args)?;
+        assert!(policy.allows("id:restricted"));
+        assert!(!policy.allows("id:anything-else"));
+
+        // Simulate a bad GitOps render that empties the ConfigMap. The reload
+        // must error (keeping last-known-good), NOT swap in an allow-all.
+        fs::write(&path, "# emptied by mistake\n")?;
+        assert!(policy.reload().is_err());
+        assert!(policy.allows("id:restricted"));
+        assert!(
+            !policy.allows("id:anything-else"),
+            "an emptied policy file must not widen to allow-all"
+        );
+
+        fs::remove_file(&path).ok();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn policy_reload_task_stops_promptly_on_shutdown() -> TestResult {
+        let path = temp_policy_path("shutdown");
+        fs::write(&path, "id:initial\n")?;
+        let mut args = valid_args();
+        args.allowed_keys_file = Some(path.clone());
+
+        let policy = SelectorPolicy::from_args(&args)?;
+        let lifecycle = Lifecycle::default();
+        // Huge interval: the task is parked on the tick. It must still exit
+        // because of the shutdown signal, not the timer.
+        let Some(handle) = spawn_policy_reload(policy, lifecycle.clone(), 3_600) else {
+            fs::remove_file(&path).ok();
+            unreachable!("a file source is configured, so a task must spawn");
+        };
+
+        lifecycle.mark_shutting_down();
+        let joined = tokio::time::timeout(Duration::from_secs(5), handle).await;
+        fs::remove_file(&path).ok();
+
+        let Ok(join_result) = joined else {
+            unreachable!("reload task did not exit promptly on shutdown");
+        };
+        join_result?;
         Ok(())
     }
 

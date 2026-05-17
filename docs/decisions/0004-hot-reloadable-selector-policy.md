@@ -46,10 +46,20 @@ Add **optional file-backed policy sources that are re-read at runtime**:
   re-evaluates the file sources on the interval and atomically swaps the
   active rules only when they change.
 - The task is spawned only when a file source is configured; otherwise
-  behavior is byte-for-byte unchanged (single startup evaluation).
+  behavior is byte-for-byte unchanged (single startup evaluation). The
+  task exits promptly on shutdown via a `Lifecycle` notification
+  (`tokio::select!` on the tick vs. a shutdown signal), not only on its
+  next tick.
 - Configured-but-unreadable/invalid files fail fast at startup; a
   transient failure during a later reload is logged and the last
   known-good policy keeps serving (fail to last-good, not open/closed).
+- **Configured-empty is not allow-all.** The legacy "empty rule set ⇒
+  allow all" applies only when *no* policy source is configured. When any
+  file source is configured, an evaluation that yields zero entries
+  (empty, comment-only, or a ConfigMap accidentally emptied by a bad
+  GitOps render) is an error: it fails fast at startup and fails to
+  last-good on reload, rather than silently widening to allow-all on the
+  no-restart path.
 - Helm chart gains `selectorPolicy.configMap` (mounted read-only at
   `/etc/bweso/policy`) and `selectorPolicy.reloadIntervalSeconds`.
 

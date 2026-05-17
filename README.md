@@ -401,7 +401,13 @@ again) and hot-swaps the active policy. Because mounted ConfigMap volumes
 update in place, changing the ConfigMap — e.g. through GitOps — updates the
 allow-list within one interval with **no provider restart and no missed-restart
 failure mode**. A transient unreadable or invalid file is logged and the last
-known-good policy keeps serving. See
+known-good policy keeps serving.
+
+A configured file source that evaluates to **zero entries** (empty,
+comment-only, or a ConfigMap accidentally emptied) is treated as an error, not
+as allow-all: the provider fails fast at startup and keeps the last known-good
+policy on reload. The legacy "no policy configured ⇒ allow all" behavior applies
+only when no inline list and no file source are set at all. See
 [deploy/eso/selector-policy-configmap.example.yaml](deploy/eso/selector-policy-configmap.example.yaml).
 
 ## Observability
